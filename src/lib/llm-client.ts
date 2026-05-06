@@ -1,15 +1,20 @@
 /**
- * OpenAI-Compatible LLM Client
+ * OpenAI-Compatible LLM Client — pi-ai powered
+ *
+ * Keeps the same exported function signatures as the original llm-client.ts
+ * for backward-compatibility with all existing API routes.
+ *
+ * Internally uses @mariozechner/pi-ai (vendored at src/lib/pi-ai) for
+ * unified multi-provider streaming and completion.
  *
  * Config priority (highest → lowest):
  *   1. data/settings.json  (written by the Settings UI)
- *   2. Environment variables: LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
+ *   2. Environment variables: LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, LLM_PROVIDER
  *   3. Built-in defaults (local Ollama)
- *
- * Works with: Ollama · OpenAI · DeepSeek · LM Studio · any OpenAI-spec API.
  */
-import fs from "fs";
-import path from "path";
+import { getActiveModel, getActiveApiKey, getCurrentSettings } from "./model-config";
+import type { Context, AssistantMessage } from "@/lib/pi-ai/index";
+import { completeSimple, streamSimple } from "@/lib/pi-ai/stream";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -35,110 +40,108 @@ export interface LLMResponse {
   tool_calls?: any[];
 }
 
-interface LLMConfig {
-  baseUrl: string;
-  apiKey: string;
-  defaultModel: string;
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Convert our simple ChatMessage[] into a pi-ai Context */
+function buildContext(messages: ChatMessage[], tools?: any[]): Context {
+  const systemMessages = messages.filter((m) => m.role === "system");
+  const nonSystemMessages = messages.filter((m) => m.role !== "system");
+
+  const systemPrompt = systemMessages.map((m) => m.content).join("\n\n");
+
+  const piMessages = nonSystemMessages.map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.content,
+    timestamp: Date.now(),
+  }));
+
+  // Convert OpenAI-style tool schema to pi-ai's TypeBox-compatible format
+  const piTools =
+    tools?.map((t: any) => {
+      const fn = t.function || t;
+      return {
+        name: fn.name,
+        description: fn.description || "",
+        parameters: fn.parameters || { type: "object", properties: {} },
+      };
+    }) ?? undefined;
+
+  return {
+    systemPrompt: systemPrompt || undefined,
+    messages: piMessages,
+    tools: piTools,
+  } as Context;
 }
 
-const SETTINGS_PATH = path.join(process.cwd(), "data", "settings.json");
+/** Convert pi-ai AssistantMessage back to our LLMResponse format */
+function toResponse(msg: AssistantMessage): LLMResponse {
+  const textContent = msg.content
+    .filter((c) => c.type === "text")
+    .map((c) => (c as { type: "text"; text: string }).text)
+    .join("");
 
-function getLLMConfig(): LLMConfig {
-  // 1. Try settings.json
-  try {
-    if (fs.existsSync(SETTINGS_PATH)) {
-      const raw = fs.readFileSync(SETTINGS_PATH, "utf-8");
-      const s = JSON.parse(raw);
-      if (s.baseUrl && s.model) {
-        return {
-          baseUrl: s.baseUrl,
-          apiKey: s.apiKey || "ollama",
-          defaultModel: s.model,
-        };
-      }
-    }
-  } catch {
-    // fall through to env vars
+  const thinkingContent = msg.content
+    .filter((c) => c.type === "thinking")
+    .map((c) => (c as { type: "thinking"; thinking: string }).thinking)
+    .join("");
+
+  // Reconstruct content with thinking wrapped in <think> tags
+  let content = textContent;
+  if (thinkingContent) {
+    content = `<think>\n${thinkingContent}\n</think>\n\n${textContent}`;
   }
 
-  // 2. Env vars
+  const toolCalls = msg.content
+    .filter((c) => c.type === "toolCall")
+    .map((c: any) => ({
+      id: c.id,
+      type: "function",
+      function: {
+        name: c.name,
+        arguments: JSON.stringify(c.arguments),
+      },
+    }));
+
   return {
-    baseUrl: process.env.LLM_BASE_URL || "http://localhost:11434/v1",
-    apiKey: process.env.LLM_API_KEY || "ollama",
-    defaultModel: process.env.LLM_MODEL || "qwen2.5:7b",
+    content,
+    model: msg.responseModel ?? msg.model,
+    usage: {
+      prompt_tokens: msg.usage.input,
+      completion_tokens: msg.usage.output,
+      total_tokens: msg.usage.totalTokens,
+    },
+    tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
   };
 }
 
-/** Sanitize messages for strict APIs (like MiniMax) that reject consecutive identical roles */
-function sanitizeMessages(messages: ChatMessage[]): ChatMessage[] {
-  if (messages.length === 0) return [];
-  const sanitized: ChatMessage[] = [messages[0]];
-  for (let i = 1; i < messages.length; i++) {
-    const current = messages[i];
-    const last = sanitized[sanitized.length - 1];
-    
-    // Merge consecutive system messages or user messages
-    if (current.role === last.role) {
-      last.content += "\n\n" + current.content;
-    } else {
-      sanitized.push({ ...current });
-    }
-  }
-  return sanitized;
-}
+// ─── Public API (backward-compatible) ─────────────────────────────────────────
 
 /** Non-streaming chat completion */
 export async function llmInvoke(
   messages: ChatMessage[],
   options: LLMOptions = {}
 ): Promise<LLMResponse> {
-  const { baseUrl, apiKey, defaultModel } = getLLMConfig();
-  const model = options.model || defaultModel;
-  const temp = Math.max(0.01, Math.min(1.0, options.temperature ?? 0.7));
+  const baseModel = getActiveModel();
+  const apiKey = getActiveApiKey();
 
-  const isMiniMax = baseUrl.includes("minimax");
+  // Allow per-call model override
+  const model = options.model
+    ? { ...baseModel, id: options.model, name: options.model }
+    : baseModel;
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: sanitizeMessages(messages),
-      temperature: temp,
-      max_tokens: options.max_tokens,
-      tools: options.tools,
-      tool_choice: options.tool_choice,
-      stream: false,
-      ...(isMiniMax ? { reasoning_split: true } : {}), // For MiniMax reasoning models compatibility
-    }),
+  const context = buildContext(messages, options.tools);
+
+  const msg = await completeSimple(model, context, {
+    apiKey,
+    temperature: options.temperature,
+    maxTokens: options.max_tokens,
   });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`LLM API error ${res.status}: ${errText}`);
+  if (msg.stopReason === "error" || msg.stopReason === "aborted") {
+    throw new Error(`LLM error: ${msg.errorMessage ?? msg.stopReason}`);
   }
 
-  const data = await res.json();
-  let content = data.choices?.[0]?.message?.content ?? "";
-  
-  // Handle MiniMax-style reasoning details
-  const reasoningArray = data.choices?.[0]?.message?.reasoning_details;
-  if (reasoningArray && Array.isArray(reasoningArray)) {
-    const rText = reasoningArray.map((r: any) => r.text || "").join("");
-    if (rText) {
-      content = `<think>\n${rText}\n</think>\n\n${content}`;
-    }
-  }
-
-  return { 
-    content, 
-    model: data.model ?? model, 
-    usage: data.usage,
-    tool_calls: data.choices?.[0]?.message?.tool_calls
-  };
+  return toResponse(msg);
 }
 
 /** Streaming chat — yields text delta chunks */
@@ -146,105 +149,67 @@ export async function* llmStream(
   messages: ChatMessage[],
   options: LLMOptions = {}
 ): AsyncGenerator<string> {
-  const { baseUrl, apiKey, defaultModel } = getLLMConfig();
-  const model = options.model || defaultModel;
-  const temp = Math.max(0.01, Math.min(1.0, options.temperature ?? 0.7));
-  const isMiniMax = baseUrl.includes("minimax");
+  const baseModel = getActiveModel();
+  const apiKey = getActiveApiKey();
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: sanitizeMessages(messages),
-      temperature: temp,
-      max_tokens: options.max_tokens,
-      stream: true,
-      ...(isMiniMax ? { reasoning_split: true } : {}), // For MiniMax reasoning models compatibility
-    }),
+  const model = options.model
+    ? { ...baseModel, id: options.model, name: options.model }
+    : baseModel;
+
+  const context = buildContext(messages, options.tools);
+
+  const eventStream = streamSimple(model, context, {
+    apiKey,
+    temperature: options.temperature,
+    maxTokens: options.max_tokens,
   });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`LLM API error ${res.status}: ${errText}`);
-  }
+  let inThinking = false;
+  let thinkingStarted = false;
+  let thinkingEnded = false;
 
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error("No response body");
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-  
-  let reasoningBuffer = "";
-  let textBuffer = "";
-  let yieldedThinkStart = false;
-  let yieldedThinkEnd = false;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed === "data: [DONE]") continue;
-      if (!trimmed.startsWith("data: ")) continue;
-      try {
-        const json = JSON.parse(trimmed.slice(6));
-        const delta = json.choices?.[0]?.delta;
-        if (!delta) continue;
-
-        // Handle reasoning details (MiniMax) or direct reasoning_content (DeepSeek)
-        const hasReasoningArray = delta.reasoning_details && delta.reasoning_details.length > 0;
-        const rawReasoningContent = delta.reasoning_content;
-        
-        if (hasReasoningArray || rawReasoningContent) {
-          if (!yieldedThinkStart) {
-            yield "<think>\n";
-            yieldedThinkStart = true;
-          }
-          
-          let newReasoning = "";
-          if (hasReasoningArray) {
-            const detail = delta.reasoning_details[0];
-            if (detail && typeof detail.text === "string") {
-              const rText = detail.text;
-              newReasoning = isMiniMax ? rText.slice(reasoningBuffer.length) : rText;
-              reasoningBuffer = isMiniMax ? rText : reasoningBuffer + rText;
-            }
-          } else if (rawReasoningContent) {
-            newReasoning = rawReasoningContent;
-          }
-          
-          if (newReasoning) yield newReasoning;
+  for await (const event of eventStream) {
+    switch (event.type) {
+      case "thinking_start":
+        if (!thinkingStarted) {
+          yield "<think>\n";
+          thinkingStarted = true;
+          inThinking = true;
         }
+        break;
 
-        // Handle standard content
-        if (typeof delta.content === "string" && delta.content.length > 0) {
-          if (yieldedThinkStart && !yieldedThinkEnd) {
-            yield "\n</think>\n\n";
-            yieldedThinkEnd = true;
-          }
-          const cText = delta.content;
-          const newText = isMiniMax ? cText.slice(textBuffer.length) : cText;
-          if (newText) {
-            yield newText;
-            textBuffer = isMiniMax ? cText : textBuffer + cText;
-          }
+      case "thinking_delta":
+        if (inThinking) {
+          yield event.delta;
         }
-      } catch {
-        // ignore malformed chunks
-      }
+        break;
+
+      case "thinking_end":
+        if (inThinking && !thinkingEnded) {
+          yield "\n</think>\n\n";
+          inThinking = false;
+          thinkingEnded = true;
+        }
+        break;
+
+      case "text_start":
+        if (thinkingStarted && !thinkingEnded) {
+          yield "\n</think>\n\n";
+          inThinking = false;
+          thinkingEnded = true;
+        }
+        break;
+
+      case "text_delta":
+        yield event.delta;
+        break;
+
+      case "error":
+        throw new Error(`LLM stream error: ${event.error.errorMessage ?? "unknown"}`);
     }
   }
-  
-  if (yieldedThinkStart && !yieldedThinkEnd) {
+
+  if (thinkingStarted && !thinkingEnded) {
     yield "\n</think>\n\n";
   }
 }
@@ -256,18 +221,35 @@ export async function checkLLMHealth(): Promise<{
   error?: string;
   baseUrl?: string;
   model?: string;
+  provider?: string;
 }> {
-  const { baseUrl, apiKey, defaultModel } = getLLMConfig();
+  const settings = getCurrentSettings();
+  const { resolvedBaseUrl, model, resolvedApi } = settings;
+
+  // For non-OpenAI-compat providers, do a lightweight stream probe instead
+  if (resolvedApi === "anthropic-messages" || resolvedApi === "google-generative-ai" || resolvedApi === "mistral-conversations") {
+    // Just report as configured — can't list models without provider-specific endpoints
+    return {
+      ok: true,
+      models: [model],
+      baseUrl: resolvedBaseUrl,
+      model,
+      provider: resolvedApi,
+    };
+  }
+
+  // OpenAI-compat: try /models endpoint
   try {
-    const res = await fetch(`${baseUrl}/models`, {
+    const apiKey = getActiveApiKey();
+    const res = await fetch(`${resolvedBaseUrl}/models`, {
       headers: { Authorization: `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(3000),
     });
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, baseUrl, model: defaultModel };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, baseUrl: resolvedBaseUrl, model };
     const data = await res.json();
     const models = (data.data ?? []).map((m: { id: string }) => m.id);
-    return { ok: true, models, baseUrl, model: defaultModel };
+    return { ok: true, models, baseUrl: resolvedBaseUrl, model, provider: resolvedApi };
   } catch (err) {
-    return { ok: false, error: String(err), baseUrl, model: defaultModel };
+    return { ok: false, error: String(err), baseUrl: resolvedBaseUrl, model };
   }
 }

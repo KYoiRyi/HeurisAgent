@@ -2,6 +2,6 @@
   "provider": "minimax",
   "baseUrl": "https://api.minimaxi.com/v1",
   "apiKey": "sk-cp-pAA1BuMfXYyblLgGP9prg2zO2xUY69HPHhdekBbvwff9-qgRYfDVo-6QouXYTihJm1_ZYtSnipxJau12DQkpGtsdnpO0HDu0udvhBxMlb3N_G0ne6YUYHoo",
-  "model": "MiniMax-M2.5-highspeed",
+  "model": "MiniMax-M2.5",
   "label": "MiniMax"
 }

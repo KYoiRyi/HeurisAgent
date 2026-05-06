@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { llmInvoke } from "@/lib/llm-client";
+import { getActiveModel, getActiveApiKey } from "@/lib/model-config";
+import { streamSimple } from "@/lib/pi-ai/stream";
+import type { Context, UserMessage, AssistantMessage as PiAssistantMessage } from "@/lib/pi-ai/index";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
 
 const CLASSROOM_SYSTEM_PROMPT = `你是一个专业的课堂互动智能体，擅长实时提问解答和知识点联动讲解。
@@ -28,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     const client = getSupabaseClient();
 
-    // 获取会话上下文（可选，DB可能不可用）
+    // 获取会话上下文
     let sessionContext = "";
     let relatedPoints: string[] = [];
     if (client && sessionId) {
@@ -49,7 +51,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 获取相关教学资源（可选）
+    // 获取相关教学资源
     let resourceContext = "";
     if (client && subject) {
       const { data: resources } = await client
@@ -71,75 +73,108 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 构建 LLM 消息
-    const messages: Array<{ role: "system" | "user" | "assistant"; content: string; tool_calls?: any }> = [
-      {
-        role: "system",
-        content: CLASSROOM_SYSTEM_PROMPT + "\n\n" + `${sessionContext}${resourceContext}\n\n学科：${subject || "通用"}，学生：${studentName || "同学"}\n\nIf you need to show an interactive simulation, diagram, or applet, you MUST call the render_live_component tool! Do NOT write markdown code blocks for interactive apps.`
-      },
-    ];
+    // Build pi-ai context
+    const systemPrompt =
+      CLASSROOM_SYSTEM_PROMPT +
+      "\n\n" +
+      `${sessionContext}${resourceContext}\n\n学科：${subject || "通用"}，学生：${studentName || "同学"}\n\nIf you need to show an interactive simulation, diagram, or applet, you MUST call the render_live_component tool! Do NOT write markdown code blocks for interactive apps.`;
 
-    // 添加历史消息上下文
+    // Build pi-ai Message array — user and assistant messages have different shapes
+    type SimpleMsg = UserMessage | PiAssistantMessage;
+    const piMessages: SimpleMsg[] = [];
+    
     if (history && Array.isArray(history)) {
       for (const msg of history.slice(-6)) {
-        messages.push({
-          role: msg.role === "student" ? "user" : "assistant",
-          content: msg.content,
-        });
+        if (msg.role === "student") {
+          piMessages.push({ role: "user", content: msg.content, timestamp: Date.now() });
+        } else {
+          piMessages.push({
+            role: "assistant",
+            content: [{ type: "text", text: msg.content }],
+            timestamp: Date.now(),
+            api: "openai-completions",
+            provider: "custom",
+            model: "unknown",
+            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+            stopReason: "stop"
+          });
+        }
       }
     }
-    messages.push({ role: "user", content: message });
+    piMessages.push({ role: "user", content: message, timestamp: Date.now() });
 
-    // 流式响应
+    const context: Context = {
+      systemPrompt,
+      messages: piMessages,
+      tools: [
+        {
+          name: "render_live_component",
+          description:
+            "Generate a live interactive UI component (HTML/JS) to render on the Stage. Use this to show simulations, interactive widgets, or dynamic web elements to the student.",
+          parameters: {
+            type: "object",
+            properties: {
+              html: { type: "string", description: "The HTML structure of the interactive component" },
+              css: { type: "string", description: "Any custom CSS styles (vanilla CSS)" },
+              js: {
+                type: "string",
+                description:
+                  "Vanilla JavaScript to make the component interactive. Do not use window.onload or DOMContentLoaded, just write the script.",
+              },
+              description: { type: "string", description: "A brief description of what this component is" },
+            },
+            required: ["html", "description"],
+          },
+        },
+      ],
+    };
+
+    const model = getActiveModel();
+    const apiKey = getActiveApiKey();
+
+    // SSE stream
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         let fullContent = "";
+        let liveComponent: Record<string, string> | null = null;
+
+        const sendEvent = (data: Record<string, unknown>) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        };
+
         try {
-          const classroomTools = [
-            {
-              type: "function",
-              function: {
-                name: "render_live_component",
-                description: "Generate a live interactive UI component (HTML/JS) to render on the Stage. Use this to show simulations, interactive widgets, or dynamic web elements to the student.",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    html: { type: "string", description: "The HTML structure of the interactive component" },
-                    css: { type: "string", description: "Any custom CSS styles (vanilla CSS)" },
-                    js: { type: "string", description: "Vanilla JavaScript to make the component interactive. Do not use window.onload or DOMContentLoaded, just write the script." },
-                    description: { type: "string", description: "A brief description of what this component is" }
-                  },
-                  required: ["html", "description"]
+          const eventStream = streamSimple(model, context, { apiKey, temperature: 0.7 });
+
+          for await (const event of eventStream) {
+            switch (event.type) {
+              case "thinking_delta":
+                // Send thinking chunks to client
+                sendEvent({ type: "thinking_delta", delta: event.delta });
+                break;
+
+              case "text_delta":
+                fullContent += event.delta;
+                sendEvent({ type: "text_delta", delta: event.delta });
+                break;
+
+              case "toolcall_end":
+                if (event.toolCall.name === "render_live_component") {
+                  liveComponent = event.toolCall.arguments as Record<string, string>;
+                  sendEvent({ type: "tool_call", toolName: "render_live_component", args: liveComponent });
                 }
-              }
-            }
-          ];
+                break;
 
-          const response = await llmInvoke(messages, { 
-            temperature: 0.7,
-            tools: classroomTools
-          });
-          
-          fullContent = response.content;
-          let liveComponent = null;
-
-          if (response.tool_calls && response.tool_calls.length > 0) {
-            const tc = response.tool_calls[0];
-            if (tc.function?.name === "render_live_component") {
-              try {
-                liveComponent = JSON.parse(tc.function.arguments);
-              } catch (e) {
-                console.error("Failed to parse tool call arguments", e);
-              }
+              case "error":
+                sendEvent({ error: event.error.errorMessage ?? "LLM error" });
+                break;
             }
           }
-          
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ content: fullContent, liveComponent })}\n\n`)
-          );
 
-          // 异步保存记录（不阻塞响应）
+          // Final aggregated result (for backward compat with any client code reading `content`)
+          sendEvent({ content: fullContent, liveComponent });
+
+          // Async save (non-blocking)
           if (client) {
             void saveClassroomRecords(
               client, sessionId, studentName, message,
@@ -147,14 +182,10 @@ export async function POST(request: NextRequest) {
             );
           }
 
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`)
-          );
+          sendEvent({ done: true });
         } catch (error) {
           const errMsg = error instanceof Error ? error.message : "未知错误";
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ error: errMsg })}\n\n`)
-          );
+          sendEvent({ error: errMsg });
         } finally {
           controller.close();
         }
