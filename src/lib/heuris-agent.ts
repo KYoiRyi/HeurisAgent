@@ -404,7 +404,7 @@ class HeurisAgentRuntime {
 
     try {
       // Build memory context
-      const memCtx = memoryStore.buildContext(prompt, 8);
+      const memCtx = memoryStore.buildContextFromQueries([prompt], 12);
       const systemPrompt =
         "你是 HeurisAgent 后台任务执行智能体。请认真完成用户分配的任务，给出简洁且有用的结果。\n\n" +
         (memCtx ? memCtx + "\n\n" : "") +
@@ -462,6 +462,10 @@ class HeurisAgentRuntime {
       db.prepare(
         `UPDATE task_runs SET status='done', result=?, finished_at=datetime('now'), tokens_used=? WHERE id=?`
       ).run(finalResult, totalTokens, runId);
+
+      memoryStore.syncTurn(prompt, finalResult, undefined, {
+        source: opts.trigger === "cron" ? "cron" : "agent_tool",
+      });
 
       // Auto-store notable results as memories
       if (finalResult.length > 50) {

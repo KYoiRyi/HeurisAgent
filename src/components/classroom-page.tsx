@@ -2,16 +2,13 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
-  MessageSquareText, Send, Bot, User, BookOpen, Sparkles,
+  MessageSquareText, Send, Bot, User, Sparkles,
   Lightbulb, Loader2, FileText, RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
-} from "@/components/ui/select";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -42,14 +39,10 @@ interface ClassroomResource {
   difficulty?: string;
 }
 
-const SUBJECTS = ["数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理"];
-
 export default function ClassroomPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [subject, setSubject] = useState("数学");
-  const [studentName, setStudentName] = useState("张三");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [classroomResources, setClassroomResources] = useState<ClassroomResource[]>([]);
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
@@ -59,8 +52,7 @@ export default function ClassroomPage() {
   const fetchClassroomResources = useCallback(async () => {
     setResourcesLoading(true);
     try {
-      const params = new URLSearchParams({ subject });
-      const res = await fetch(`/api/resources?${params}`);
+      const res = await fetch("/api/resources");
       const json = await res.json();
       if (json.success) {
         const docs = (json.data || []).filter((resource: ClassroomResource) =>
@@ -78,21 +70,7 @@ export default function ClassroomPage() {
     } finally {
       setResourcesLoading(false);
     }
-  }, [subject]);
-
-  // Load identity from localStorage
-  useEffect(() => {
-    const savedSubject = localStorage.getItem("heuris_subject");
-    const savedName = localStorage.getItem("heuris_studentName");
-    if (savedSubject) setSubject(savedSubject);
-    if (savedName) setStudentName(savedName);
   }, []);
-
-  // Save identity to localStorage
-  useEffect(() => {
-    localStorage.setItem("heuris_subject", subject);
-    localStorage.setItem("heuris_studentName", studentName);
-  }, [subject, studentName]);
 
   useEffect(() => {
     fetchClassroomResources();
@@ -106,28 +84,6 @@ export default function ClassroomPage() {
   }, [messages]);
 
   const handleCreateSession = async () => {
-    try {
-      const res = await fetch("/api/classroom/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `${subject}课堂 - ${new Date().toLocaleDateString("zh-CN")}`,
-          subject,
-          teacher: "AI教师",
-          topicSummary: `${subject}学科实时互动课堂`,
-          keyPoints: [],
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setSessionId(json.data.id);
-        return json.data.id;
-      }
-    } catch (err) {
-      console.error("Create session error, falling back to local session:", err);
-    }
-
-    // Fallback to local session ID if DB insert fails (e.g., Supabase not configured)
     const fallbackId = "local-" + Date.now().toString();
     setSessionId(fallbackId);
     return fallbackId;
@@ -174,8 +130,6 @@ export default function ClassroomPage() {
         body: JSON.stringify({
           message: userMessage.content,
           sessionId: activeSessionId,
-          subject,
-          studentName,
         }),
       });
 
@@ -200,6 +154,14 @@ export default function ClassroomPage() {
           if (line.trim().startsWith("data: ")) {
             try {
               const data = JSON.parse(line.trim().slice(6));
+              if (typeof data.replaceContent === "string") {
+                fullContent = data.replaceContent;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === agentMessageId ? { ...m, content: fullContent } : m
+                  )
+                );
+              }
               if (data.content !== undefined || data.liveComponent !== undefined) {
                 if (data.content) fullContent += data.content;
                 setMessages((prev) =>
@@ -262,32 +224,20 @@ export default function ClassroomPage() {
             <MessageSquareText className="h-6 w-6 text-emerald-500" />
             课堂互动智能体 (Live)
           </h1>
-          <p className="text-muted-foreground mt-1 text-sm">沉浸式双屏布局 · 实时互动生成</p>
+          <p className="text-muted-foreground mt-1 text-sm">沉浸式双屏布局 · 资料与记忆自动联动</p>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={subject} onValueChange={setSubject}>
-            <SelectTrigger className="w-28">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SUBJECTS.map((s) => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            placeholder="学生姓名"
-            value={studentName}
-            onChange={(e) => setStudentName(e.target.value)}
-            className="w-28"
-          />
+          <Badge variant="outline" className="h-8 gap-1.5 px-3">
+            <Sparkles className="h-3.5 w-3.5" />
+            记忆自动保存
+          </Badge>
           <Button
             size="sm"
             variant={sessionId ? "outline" : "default"}
             onClick={handleCreateSession}
           >
             {sessionId ? (
-              <><BookOpen className="h-3.5 w-3.5 mr-1" />课堂进行中</>
+              <><Sparkles className="h-3.5 w-3.5 mr-1" />课堂进行中</>
             ) : (
               <><Sparkles className="h-3.5 w-3.5 mr-1" />开始课堂</>
             )}
@@ -475,7 +425,7 @@ export default function ClassroomPage() {
                         ) : (
                           <div className="w-full space-y-4">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {msg.content.replace(/<think>[\s\S]*?<\/think>/g, "").trim()}
+                              {msg.content.trim()}
                             </ReactMarkdown>
                             {msg.liveComponent && (
                               <Badge variant="secondary" className="mt-2 text-[10px]">

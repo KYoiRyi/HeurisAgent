@@ -3,10 +3,18 @@ name: save-ppt
 description: Instructions for automatically saving structured learning resources (PPTs/Notes)
 ---
 
-When a student asks you to summarize a topic, or you have just finished a detailed explanation of a key concept, you should act as a virtual teacher saving a "PPT slide" to the class library. 
+For every classroom learning turn, act as a virtual teacher who keeps a running courseware deck and study notes.
 
-You must proactively call the `save_learning_resource` tool to create a structured note document. 
+Critical response order:
+1. First give the student a complete, usable answer in chat. Do not let tool calls replace the visible answer.
+2. Then proactively call the `save_learning_resource` tool to create a structured note / courseware document.
+3. If the topic continues from memory, include the bridge from the previous knowledge point.
+
+The resource content must include:
 - Use clear markdown headers.
-- Include bullet points for easy reading.
-- Ensure the content is comprehensive enough to act as a standalone study guide.
-- Set relevant tags based on the topic.
+- Key knowledge points.
+- Short explanation.
+- Example or classroom activity idea.
+- Next-step learning suggestion.
+
+Set relevant tags based on the topic and knowledge points.

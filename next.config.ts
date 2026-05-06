@@ -1,8 +1,8 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // Allow local development from any origin
-  allowedDevOrigins: ['localhost', '127.0.0.1', '*.dev.coze.site'],
+  // Local-only development origins. The custom server also binds to 127.0.0.1.
+  allowedDevOrigins: ['localhost', '127.0.0.1'],
   images: {
     remotePatterns: [
       {

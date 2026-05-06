@@ -193,10 +193,9 @@ class MemoryStore {
       if (seen.size >= maxEntries) return formatMemoryContext([...seen.values()]);
     }
 
-    if (seen.size === 0) {
-      for (const memory of this.list({ limit: Math.min(3, maxEntries) })) {
-        seen.set(memory.id, memory);
-      }
+    for (const memory of this.list({ limit: maxEntries })) {
+      if (!seen.has(memory.id)) seen.set(memory.id, memory);
+      if (seen.size >= maxEntries) return formatMemoryContext([...seen.values()]);
     }
 
     return formatMemoryContext([...seen.values()]);
@@ -210,15 +209,23 @@ class MemoryStore {
     userMsg: string,
     assistantMsg: string,
     sessionId?: string,
-    context: { studentName?: string; subject?: string } = {}
+    context: { studentName?: string; subject?: string; source?: string } = {}
   ): void {
-    void assistantMsg;
     const text = userMsg.replace(/\s+/g, " ").trim();
     const prefix = context.studentName ? `学生${context.studentName}：` : "";
     const contextTags = [
       ...(context.studentName ? [`student:${context.studentName}`] : []),
       ...(context.subject ? [`subject:${context.subject}`] : []),
     ];
+    const source = context.source ?? "auto";
+
+    this.add(formatTurnMemory(userMsg, assistantMsg), {
+      source,
+      session_id: sessionId,
+      importance: 1,
+      tags: ["conversation-turn", ...contextTags],
+    });
+
     const memoryTriggers: Array<{ re: RegExp; toFact: (match: RegExpMatchArray) => string; tags: string[] }> = [
       { re: /(?:我的名字是|我叫)\s*([^，。,.!?\n]{1,20})/, toFact: (m) => `学生姓名：${m[1].trim()}`, tags: ["profile"] },
       { re: /我是\s*([^，。,.!?\n]{1,10})年级/, toFact: (m) => `学生年级：${m[1].trim()}`, tags: ["profile"] },
@@ -236,7 +243,7 @@ class MemoryStore {
       const match = text.match(trigger.re);
       if (match) {
         this.add(`${prefix}${trigger.toFact(match)}`, {
-          source: "auto",
+          source,
           session_id: sessionId,
           importance: 2,
           tags: ["auto-extracted", ...trigger.tags, ...contextTags],
@@ -297,6 +304,22 @@ function formatMemoryContext(memories: Memory[]): string {
     lines.join("\n") +
     "\n</memory-context>"
   );
+}
+
+function formatTurnMemory(userMsg: string, assistantMsg: string): string {
+  const user = compactForMemory(userMsg, 3000);
+  const assistant = compactForMemory(assistantMsg, 5000);
+  return [
+    "[对话记录]",
+    `用户：${user}`,
+    `助手：${assistant || "(无文本回复)"}`,
+  ].join("\n");
+}
+
+function compactForMemory(value: string, maxLength: number): string {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}…`;
 }
 
 // Singleton export

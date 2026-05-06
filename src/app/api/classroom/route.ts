@@ -4,6 +4,7 @@ import { Agent } from "@/lib/pi-agent/agent";
 import type { AgentEvent as PiAgentEvent } from "@/lib/pi-agent/types";
 import { buildClassroomTools } from "@/lib/heuris-agent";
 import { loadSkills, formatSkillsForPrompt } from "@/lib/pi-agent/skills";
+import type { AssistantMessage } from "@/lib/pi-ai/index";
 import path from "path";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
 import { sessionManager } from "@/lib/pi-agent/session-manager";
@@ -28,6 +29,9 @@ const CLASSROOM_SYSTEM_PROMPT = `你是一个专业的课堂互动智能体，�
 export async function POST(request: NextRequest) {
   try {
     const { message, sessionId, subject, studentName } = await request.json();
+    const legacySubject = typeof subject === "string" && subject.trim() ? subject.trim() : undefined;
+    const legacyStudentName =
+      typeof studentName === "string" && studentName.trim() ? studentName.trim() : undefined;
 
     if (!message) {
       return NextResponse.json({ error: "消息内容不能为空" }, { status: 400 });
@@ -58,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     // 获取相关教学资源，Supabase 不可用时回退到本地 SQLite 资源库
     let resourceContext = "";
-    const resources = await loadClassroomResources(client, subject);
+    const resources = await loadClassroomResources(client, legacySubject);
     if (resources.length > 0) {
       resourceContext =
         "\n\n相关教学资源参考：\n" +
@@ -70,8 +74,15 @@ export async function POST(request: NextRequest) {
           .join("\n");
     }
 
-    // Auto-inject memory context for this student
-    const memoryContext = memoryStore.buildContextFromQueries([studentName, subject, message], 10);
+    const inferredResourceSubject = inferSubjectFromResources(resources);
+    const recordSubject = legacySubject ?? inferredResourceSubject ?? "通用";
+    const recordStudentName = legacyStudentName ?? "记忆学习者";
+
+    // Auto-inject memory context from the active turn plus previously saved talks.
+    const memoryContext = memoryStore.buildContextFromQueries(
+      [message, legacyStudentName, legacySubject, inferredResourceSubject],
+      14
+    );
 
     // Load agent skills
     const skillsDir = path.join(process.cwd(), "data", "skills");
@@ -84,7 +95,9 @@ export async function POST(request: NextRequest) {
       skillsPrompt +
       "\n\n" +
       (memoryContext ? memoryContext + "\n\n" : "") +
-      `${sessionContext}${resourceContext}\n\n学科：${subject || "通用"}，学生：${studentName || "同学"}\n\nIf you need to show an interactive simulation, diagram, or applet, you MUST call the render_live_component tool! Do NOT write markdown code blocks for interactive apps.`;
+      `${sessionContext}${resourceContext}\n\n` +
+      "不要依赖旧版的手动学科/学生姓名选择器；请优先从当前对话、课堂资料、技能说明和记忆上下文中推断学习者画像、主题和薄弱点。若确实缺少关键信息，再自然追问。\n\n" +
+      "If you need to show an interactive simulation, diagram, or applet, you MUST call the render_live_component tool! Do NOT write markdown code blocks for interactive apps.";
 
     // Load agent history from stateful session manager
     const piMessages = sessionId ? sessionManager.load(sessionId) : [];
@@ -98,7 +111,7 @@ export async function POST(request: NextRequest) {
         systemPrompt,
         messages: piMessages,
         model,
-        tools: buildClassroomTools({ studentName, sessionId, subject }),
+        tools: buildClassroomTools({ studentName: legacyStudentName, sessionId, subject: legacySubject }),
       },
       getApiKey: () => apiKey,
       toolExecution: "parallel",
@@ -109,9 +122,9 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         let fullContent = "";
+        let finalAssistantText = "";
         let liveComponent: Record<string, string> | null = null;
         let finalError: string | null = null;
-        let isThinking = false;
 
         const sendEvent = (data: Record<string, unknown>) => {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
@@ -122,16 +135,12 @@ export async function POST(request: NextRequest) {
             if (event.type === "message_update") {
               const chunk = event.assistantMessageEvent;
               if (chunk.type === "thinking_delta") {
-                if (!isThinking) {
-                  sendEvent({ content: "<think>\n" });
-                  isThinking = true;
-                }
+                fullContent += chunk.delta;
                 sendEvent({ content: chunk.delta });
+              } else if (chunk.type === "thinking_end") {
+                fullContent += "\n\n";
+                sendEvent({ content: "\n\n" });
               } else if (chunk.type === "text_delta") {
-                if (isThinking) {
-                  sendEvent({ content: "\n</think>\n" });
-                  isThinking = false;
-                }
                 fullContent += chunk.delta;
                 sendEvent({ content: chunk.delta });
               } else if (chunk.type === "error") {
@@ -159,8 +168,8 @@ export async function POST(request: NextRequest) {
                 // Add to agent tasks or errors table in background
                 if (client) {
                   void client.from("learning_records").insert({
-                    student_name: studentName || "匿名学生",
-                    subject: subject || "通用",
+                    student_name: recordStudentName,
+                    subject: recordSubject,
                     record_type: "error",
                     agent_type: "classroom_agent",
                     description: `工具执行失败: ${event.toolName}`,
@@ -173,30 +182,47 @@ export async function POST(request: NextRequest) {
                   resourceSaved: event.result?.details ?? null,
                 });
               }
+            } else if (event.type === "message_end") {
+              if (event.message.role === "assistant") {
+                finalAssistantText = assistantMessageToDisplayText(event.message as AssistantMessage);
+              }
             }
           });
 
           // Run the agent loop by prompting it with the user message
           await agent.prompt(message);
 
-          if (isThinking) {
-             sendEvent({ content: "\n</think>\n" });
-          }
-
           // Final aggregated result (for backward compat)
           if (!finalError && liveComponent) {
              sendEvent({ liveComponent });
           }
 
-          // Background decoupled save
+          const reconciledContent = reconcileStreamedContent(fullContent, finalAssistantText, sendEvent);
+          fullContent = reconciledContent;
+
+          if (!finalError && !fullContent.trim()) {
+            const fallbackContent = "可以，我们继续学。你可以直接告诉我想接着哪个知识点，或者让我根据已有记忆继续推进。";
+            fullContent = fallbackContent;
+            sendEvent({ content: fallbackContent });
+          }
+          const knowledgePoints = inferKnowledgePoints(`${message}\n${fullContent}\n${resourceContext}`);
+
+          // 强制保存：每一轮都保存对话记忆、课堂笔记/课件、知识点记忆。
           if (!finalError) {
-            memoryStore.syncTurn(message, fullContent, sessionId, { studentName, subject });
+            persistClassroomArtifacts({
+              message,
+              answer: fullContent,
+              sessionId,
+              studentName: recordStudentName,
+              subject: recordSubject,
+              knowledgePoints,
+            });
           }
 
           if (client) {
             saveClassroomRecords(
-              client, sessionId, studentName, message,
-              fullContent, relatedPoints, subject, finalError
+              client, sessionId, recordStudentName, message,
+              fullContent, knowledgePoints.length ? knowledgePoints : relatedPoints, recordSubject, finalError
             ).catch(err => console.error("Background save error:", err));
           }
           // Wait for agent to settle
@@ -214,8 +240,8 @@ export async function POST(request: NextRequest) {
           
           if (client) {
              client.from("learning_records").insert({
-               student_name: studentName || "匿名学生",
-               subject: subject || "通用",
+               student_name: recordStudentName,
+               subject: recordSubject,
                record_type: "error",
                agent_type: "classroom_agent",
                description: `课堂致命错误: ${errMsg}`,
@@ -244,6 +270,7 @@ export async function POST(request: NextRequest) {
 interface ClassroomResourceContext {
   title: string;
   content: string | null;
+  subject?: string | null;
 }
 
 async function loadClassroomResources(
@@ -251,15 +278,18 @@ async function loadClassroomResources(
   subject: string | undefined
 ): Promise<ClassroomResourceContext[]> {
   const localResources = resourceStore.list({ subject, limit: 5 });
-  if (!client || !subject) return localResources;
+  if (!client) return localResources;
 
-  const { data, error } = await client
+  let query = client
     .from("learning_resources")
-    .select("title, content, tags, category")
-    .eq("subject", subject)
+    .select("title, content, subject, tags, category")
     .eq("is_shared", true)
     .order("created_at", { ascending: false })
     .limit(5);
+
+  if (subject) query = query.eq("subject", subject);
+
+  const { data, error } = await query;
 
   if (error) {
     console.warn("[classroom] Supabase resource lookup failed, using local resources:", error.message);
@@ -267,12 +297,168 @@ async function loadClassroomResources(
   }
 
   return [
-    ...(data || []).map((resource: { title: string; content: string | null }) => ({
+    ...(data || []).map((resource: { title: string; content: string | null; subject?: string | null }) => ({
       title: resource.title,
       content: resource.content,
+      subject: resource.subject,
     })),
     ...localResources,
   ].slice(0, 5);
+}
+
+function inferSubjectFromResources(resources: ClassroomResourceContext[]): string | undefined {
+  const counts = new Map<string, number>();
+  for (const resource of resources) {
+    if (!resource.subject) continue;
+    counts.set(resource.subject, (counts.get(resource.subject) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+function assistantMessageToDisplayText(message: AssistantMessage): string {
+  const text = message.content
+    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+
+  if (text.trim()) return text;
+
+  return message.content
+    .filter((part): part is { type: "thinking"; thinking: string } => part.type === "thinking")
+    .map((part) => part.thinking)
+    .join("\n\n");
+}
+
+function reconcileStreamedContent(
+  streamed: string,
+  finalText: string,
+  sendEvent: (data: Record<string, unknown>) => void
+): string {
+  const final = finalText.trim();
+  if (!final) return streamed;
+  if (streamed.trim() === final) return streamed;
+
+  if (final.startsWith(streamed)) {
+    const suffix = final.slice(streamed.length);
+    if (suffix) sendEvent({ content: suffix });
+    return final;
+  }
+
+  sendEvent({ replaceContent: final });
+  return final;
+}
+
+function inferKnowledgePoints(text: string): string[] {
+  const points = new Set<string>();
+  const commonPhysicsPoints = [
+    "电磁感应",
+    "楞次定律",
+    "法拉第电磁感应定律",
+    "磁通量",
+    "右手定则",
+    "左手定则",
+    "感应电流",
+    "感应电动势",
+    "自感",
+    "互感",
+  ];
+
+  for (const point of commonPhysicsPoints) {
+    if (text.includes(point)) points.add(point);
+  }
+
+  const matches = text.match(/[\u4e00-\u9fa5A-Za-z0-9·+\-]{2,24}(?:定律|公式|概念|原理|规则|方法|模型|实验|单位|性质|知识点)/g) ?? [];
+  for (const match of matches) points.add(match);
+
+  return [...points].slice(0, 8);
+}
+
+function persistClassroomArtifacts(input: {
+  message: string;
+  answer: string;
+  sessionId?: string;
+  studentName: string;
+  subject: string;
+  knowledgePoints: string[];
+}) {
+  const tags = [
+    "classroom",
+    "conversation-turn",
+    `subject:${input.subject}`,
+    ...input.knowledgePoints.map((point) => `kp:${point}`),
+  ];
+
+  memoryStore.syncTurn(input.message, input.answer, input.sessionId, {
+    studentName: input.studentName,
+    subject: input.subject,
+    source: "classroom",
+  });
+
+  if (input.knowledgePoints.length > 0) {
+    memoryStore.add(
+      [
+        `[课堂知识点] ${input.knowledgePoints.join("、")}`,
+        `问题：${input.message}`,
+        `摘要：${compactText(input.answer, 500)}`,
+      ].join("\n"),
+      {
+        source: "classroom",
+        session_id: input.sessionId,
+        importance: 2,
+        tags: ["knowledge-point", ...tags],
+      }
+    );
+  }
+
+  resourceStore.add({
+    title: `课堂课件与笔记 - ${makeArtifactTitle(input)}`,
+    subject: input.subject,
+    category: "note",
+    content: buildClassroomNote(input),
+    tags,
+    difficulty: "medium",
+    created_by: "classroom_agent",
+  });
+}
+
+function makeArtifactTitle(input: { message: string; knowledgePoints: string[] }): string {
+  const topic = input.knowledgePoints[0] ?? compactText(input.message, 18);
+  return `${topic} - ${new Date().toLocaleDateString("zh-CN")}`;
+}
+
+function buildClassroomNote(input: {
+  message: string;
+  answer: string;
+  subject: string;
+  knowledgePoints: string[];
+}): string {
+  const knowledge = input.knowledgePoints.length
+    ? input.knowledgePoints.map((point) => `- ${point}`).join("\n")
+    : "- 待从后续对话中继续归纳";
+
+  return [
+    `# ${makeArtifactTitle(input)}`,
+    "",
+    `**学科**：${input.subject}`,
+    "",
+    "## 本轮问题",
+    input.message,
+    "",
+    "## 知识点",
+    knowledge,
+    "",
+    "## 课堂笔记",
+    input.answer,
+    "",
+    "## 下次衔接",
+    "继续从本轮知识点出发，先回顾关键概念，再用例题或互动演示巩固。",
+  ].join("\n");
+}
+
+function compactText(text: string, maxLength: number): string {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (compact.length <= maxLength) return compact;
+  return `${compact.slice(0, maxLength)}…`;
 }
 
 async function saveClassroomRecords(
@@ -286,7 +472,7 @@ async function saveClassroomRecords(
   finalError: string | null
 ) {
   try {
-    if (sessionId) {
+    if (sessionId && !sessionId.startsWith("local-")) {
       await client.from("classroom_messages").insert({
         session_id: sessionId,
         role: "student",

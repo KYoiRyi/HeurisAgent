@@ -21,11 +21,31 @@ export type ChatMessage = {
   content: string;
 };
 
+interface OpenAIToolLike {
+  function?: {
+    name?: string;
+    description?: string;
+    parameters?: unknown;
+  };
+  name?: string;
+  description?: string;
+  parameters?: unknown;
+}
+
+interface OpenAIToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
 export interface LLMOptions {
   model?: string;
   temperature?: number;
   max_tokens?: number;
-  tools?: any[];
+  tools?: OpenAIToolLike[];
   tool_choice?: string | object;
 }
 
@@ -37,13 +57,13 @@ export interface LLMResponse {
     completion_tokens: number;
     total_tokens: number;
   };
-  tool_calls?: any[];
+  tool_calls?: OpenAIToolCall[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Convert our simple ChatMessage[] into a pi-ai Context */
-function buildContext(messages: ChatMessage[], tools?: any[]): Context {
+function buildContext(messages: ChatMessage[], tools?: OpenAIToolLike[]): Context {
   const systemMessages = messages.filter((m) => m.role === "system");
   const nonSystemMessages = messages.filter((m) => m.role !== "system");
 
@@ -57,11 +77,11 @@ function buildContext(messages: ChatMessage[], tools?: any[]): Context {
 
   // Convert OpenAI-style tool schema to pi-ai's TypeBox-compatible format
   const piTools =
-    tools?.map((t: any) => {
+    tools?.map((t) => {
       const fn = t.function || t;
       return {
-        name: fn.name,
-        description: fn.description || "",
+        name: fn.name ?? "",
+        description: fn.description ?? "",
         parameters: fn.parameters || { type: "object", properties: {} },
       };
     }) ?? undefined;
@@ -80,22 +100,11 @@ function toResponse(msg: AssistantMessage): LLMResponse {
     .map((c) => (c as { type: "text"; text: string }).text)
     .join("");
 
-  const thinkingContent = msg.content
-    .filter((c) => c.type === "thinking")
-    .map((c) => (c as { type: "thinking"; thinking: string }).thinking)
-    .join("");
-
-  // Reconstruct content with thinking wrapped in <think> tags
-  let content = textContent;
-  if (thinkingContent) {
-    content = `<think>\n${thinkingContent}\n</think>\n\n${textContent}`;
-  }
-
   const toolCalls = msg.content
     .filter((c) => c.type === "toolCall")
-    .map((c: any) => ({
+    .map((c) => ({
       id: c.id,
-      type: "function",
+      type: "function" as const,
       function: {
         name: c.name,
         arguments: JSON.stringify(c.arguments),
@@ -103,7 +112,7 @@ function toResponse(msg: AssistantMessage): LLMResponse {
     }));
 
   return {
-    content,
+    content: textContent,
     model: msg.responseModel ?? msg.model,
     usage: {
       prompt_tokens: msg.usage.input,
@@ -164,40 +173,18 @@ export async function* llmStream(
     maxTokens: options.max_tokens,
   });
 
-  let inThinking = false;
-  let thinkingStarted = false;
-  let thinkingEnded = false;
-
   for await (const event of eventStream) {
     switch (event.type) {
       case "thinking_start":
-        if (!thinkingStarted) {
-          yield "<think>\n";
-          thinkingStarted = true;
-          inThinking = true;
-        }
         break;
 
       case "thinking_delta":
-        if (inThinking) {
-          yield event.delta;
-        }
         break;
 
       case "thinking_end":
-        if (inThinking && !thinkingEnded) {
-          yield "\n</think>\n\n";
-          inThinking = false;
-          thinkingEnded = true;
-        }
         break;
 
       case "text_start":
-        if (thinkingStarted && !thinkingEnded) {
-          yield "\n</think>\n\n";
-          inThinking = false;
-          thinkingEnded = true;
-        }
         break;
 
       case "text_delta":
@@ -209,9 +196,6 @@ export async function* llmStream(
     }
   }
 
-  if (thinkingStarted && !thinkingEnded) {
-    yield "\n</think>\n\n";
-  }
 }
 
 /** Check if the LLM backend is reachable */

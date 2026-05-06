@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Streaming
-    const memCtx = memoryStore.buildContext(prompt, 8);
+    const memCtx = memoryStore.buildContextFromQueries([prompt], 12);
     const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
       {
         role: "system",
@@ -43,10 +43,8 @@ export async function POST(request: NextRequest) {
             fullContent += chunk;
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
           }
-          // Save to memory after done
-          if (fullContent.length > 50) {
-            memoryStore.syncTurn(prompt, fullContent, sessionId);
-          }
+          // Save every completed turn to long-term memory.
+          memoryStore.syncTurn(prompt, fullContent, sessionId, { source: "agent_tool" });
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`));
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
