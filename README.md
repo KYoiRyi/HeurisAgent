@@ -1,363 +1,87 @@
-# projects
+# HeurisAgent
 
-这是一个基于 [Next.js 16](https://nextjs.org) + [shadcn/ui](https://ui.shadcn.com) 的全栈应用项目，由扣子编程 CLI 创建。
+**HeurisAgent** (多智能体启发式学习平台) 是一个基于多智能体协作的启发式学习平台。平台包含课堂互动、错题管理、复习策略三大核心智能体，支持教学资源共享和智能体间的数据协同，旨在提供一个沉浸式、互动性强的自主学习环境。
 
-## 快速开始
+## 📸 界面预览
 
-### 启动开发服务器
+这里是平台的部分功能截图展示：
 
-```bash
-coze dev
-```
+![Dashboard/Monitor](docs/屏幕截图 2026-05-06 161155.png)
 
-启动后，在浏览器中打开 [http://localhost:5000](http://localhost:5000) 查看应用。
+![Classroom](docs/屏幕截图 2026-05-06 161711.png)
 
-开发服务器支持热更新，修改代码后页面会自动刷新。
+![Errors/Review](docs/屏幕截图 2026-05-06 161748.png)
 
-### 构建生产版本
+![Resources](docs/屏幕截图 2026-05-06 163442.png)
 
-```bash
-coze build
-```
+![Settings/Agents](docs/屏幕截图 2026-05-06 163451.png)
 
-### 启动生产服务器
+*(注：以上为不同模块的预览图，包括工作台、互动课堂、记忆与复习策略管理等。)*
 
-```bash
-coze start
-```
+## ✨ 核心特性
 
-## 项目结构
+本项目深入结合了多智能体架构（Multi-Agent Architecture）与极致的 UI 设计美学，致力于在学习场景中实现自治、启发与陪伴。
 
-```
-src/
-├── app/                      # Next.js App Router 目录
-│   ├── layout.tsx           # 根布局组件
-│   ├── page.tsx             # 首页
-│   ├── globals.css          # 全局样式（包含 shadcn 主题变量）
-│   └── [route]/             # 其他路由页面
-├── components/              # React 组件目录
-│   └── ui/                  # shadcn/ui 基础组件（优先使用）
-│       ├── button.tsx
-│       ├── card.tsx
-│       └── ...
-├── lib/                     # 工具函数库
-│   └── utils.ts            # cn() 等工具函数
-└── hooks/                   # 自定义 React Hooks（可选）
+### 1. 多智能体架构与底层协同 (Hermes-Agent Pattern)
+- **角色化智能体矩阵**：内置了课堂互动（负责内容引导与即时问答）、错题管理（负责错题解析与举一反三）、复习策略（负责记忆曲线计算与计划排期）三大核心智能体。
+- **后台自治执行 (Autonomous Daemon)**：底层采用基于 Hermes-Agent 设计模式的后台守护进程，各智能体能够在没有用户主动触发的情况下，根据 Cron 调度或事件触发进行后台记忆整理、资源分类和数据同步。
+- **Function Calling 深度集成**：结合 DeepSeek API 的函数调用能力（Function Calling），智能体不仅能“对话”，更能主动查询数据库、操作 UI 面板、生成教学卡片等，实现真正的“知行合一”。
 
-server/
-├── index.ts                 # 自定义服务器入口
-├── tsconfig.json           # Server TypeScript 配置
-└── dist/                    # 编译输出目录（自动生成）
-```
+### 2. 沉浸式分离式互动课堂 (Stage vs. Chat)
+- **双模态交互布局**：课堂模块采用了经典的“左侧舞台（Stage）+ 右侧对话（Chat）”布局。当与 AI 交流特定知识点时，左侧可以动态渲染公式、白板图表或图文卡片，右侧保持连续的对话流，打造类似 OpenMAIC 的沉浸感。
+- **SSE 流式响应**：通过 Server-Sent Events (SSE) 技术，AI 的思考过程、中间函数调用状态以及最终输出，都会在对话面板与舞台中平滑且无延迟地流式展现，拒绝漫长的 Loading 等待。
 
-## 核心开发规范
+### 3. 极简美学设计 (Ollama-Inspired Minimalist Design)
+- **克制且纯粹的视觉语言**：平台 UI 深度贯彻了 Ollama 的极简设计哲学。摒弃了所有花哨的投影（Shadows）、渐变色（Gradients）以及复杂的色系。
+- **纸白背景与药丸组件**：整个平台像一张纯净的纸张（Paper-white canvas）。所有的交互元素、按钮和标签全部统一为饱满的全圆角“药丸形（Pill-shaped）”组件。
+- **色彩与排版（Typography Focus）**：仅保留了极致的黑、白以及三种中性灰（用以区分边框、正文与次要信息）。利用字体的字重与比例搭建信息层级，呈现出犹如精心排版的 Markdown 文档般的视觉享受。
 
-### 1. 组件开发
+### 4. 记忆持久化与长效状态追踪
+- **云端数据同步**：借助 Supabase (PostgreSQL) 强大的关系型数据管理与 Drizzle ORM，智能体在对话中提取的错题、学习偏好等将被结构化持久存储。
+- **长期会话记忆**：不仅仅是单次对话，各智能体之间能共享同一份用户画像与学习资源库（Learning Resources / Learning Records 表），从而跨越时间维度，对用户的长期学习轨迹提供连贯性的复习规划与辅导反馈。
 
-**优先使用 shadcn/ui 基础组件**
+## 🛠️ 技术栈
 
-本项目已预装完整的 shadcn/ui 组件库，位于 `src/components/ui/` 目录。开发时应优先使用这些组件作为基础：
+- **框架**: Next.js 16 (App Router) + React 19
+- **语言**: TypeScript 5
+- **UI 组件**: shadcn/ui (基于 Radix UI) + Tailwind CSS 4
+- **数据库**: Supabase (PostgreSQL / Drizzle Schema)
+- **AI 驱动**: coze-coding-dev-sdk (豆包 Seed 系列) / DeepSeek API
 
-```tsx
-// ✅ 推荐：使用 shadcn 基础组件
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+## 🚀 快速开始
 
-export default function MyComponent() {
-  return (
-    <Card>
-      <CardHeader>标题</CardHeader>
-      <CardContent>
-        <Input placeholder="输入内容" />
-        <Button>提交</Button>
-      </CardContent>
-    </Card>
-  );
-}
-```
+### 环境准备
 
-**可用的 shadcn 组件清单**
+请确保你已经安装了 `pnpm` (Node.js 包管理器) 以及配置了对应的 Supabase 和大模型 API 密钥 (请参考或复制 `.env.local.example` 创建 `.env.local`)。
 
-- 表单：`button`, `input`, `textarea`, `select`, `checkbox`, `radio-group`, `switch`, `slider`
-- 布局：`card`, `separator`, `tabs`, `accordion`, `collapsible`, `scroll-area`
-- 反馈：`alert`, `alert-dialog`, `dialog`, `toast`, `sonner`, `progress`
-- 导航：`dropdown-menu`, `menubar`, `navigation-menu`, `context-menu`
-- 数据展示：`table`, `avatar`, `badge`, `hover-card`, `tooltip`, `popover`
-- 其他：`calendar`, `command`, `carousel`, `resizable`, `sidebar`
-
-详见 `src/components/ui/` 目录下的具体组件实现。
-
-### 2. 路由开发
-
-Next.js 使用文件系统路由，在 `src/app/` 目录下创建文件夹即可添加路由：
+### 安装依赖
 
 ```bash
-# 创建新路由 /about
-src/app/about/page.tsx
-
-# 创建动态路由 /posts/[id]
-src/app/posts/[id]/page.tsx
-
-# 创建路由组（不影响 URL）
-src/app/(marketing)/about/page.tsx
-
-# 创建 API 路由
-src/app/api/users/route.ts
-```
-
-**页面组件示例**
-
-```tsx
-// src/app/about/page.tsx
-import { Button } from '@/components/ui/button';
-
-export const metadata = {
-  title: '关于我们',
-  description: '关于页面描述',
-};
-
-export default function AboutPage() {
-  return (
-    <div>
-      <h1>关于我们</h1>
-      <Button>了解更多</Button>
-    </div>
-  );
-}
-```
-
-**动态路由示例**
-
-```tsx
-// src/app/posts/[id]/page.tsx
-export default async function PostPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-
-  return <div>文章 ID: {id}</div>;
-}
-```
-
-**API 路由示例**
-
-```tsx
-// src/app/api/users/route.ts
-import { NextResponse } from 'next/server';
-
-export async function GET() {
-  return NextResponse.json({ users: [] });
-}
-
-export async function POST(request: Request) {
-  const body = await request.json();
-  return NextResponse.json({ success: true });
-}
-```
-
-### 3. 依赖管理
-
-**必须使用 pnpm 管理依赖**
-
-```bash
-# ✅ 安装依赖
 pnpm install
-
-# ✅ 添加新依赖
-pnpm add package-name
-
-# ✅ 添加开发依赖
-pnpm add -D package-name
-
-# ❌ 禁止使用 npm 或 yarn
-# npm install  # 错误！
-# yarn add     # 错误！
 ```
 
-项目已配置 `preinstall` 脚本，使用其他包管理器会报错。
+### 开发环境
 
-### 4. 样式开发
+运行以下命令启动本地开发服务器：
 
-**使用 Tailwind CSS v4**
-
-本项目使用 Tailwind CSS v4 进行样式开发，并已配置 shadcn 主题变量。
-
-```tsx
-// 使用 Tailwind 类名
-<div className="flex items-center gap-4 p-4 rounded-lg bg-background">
-  <Button className="bg-primary text-primary-foreground">
-    主要按钮
-  </Button>
-</div>
-
-// 使用 cn() 工具函数合并类名
-import { cn } from '@/lib/utils';
-
-<div className={cn(
-  "base-class",
-  condition && "conditional-class",
-  className
-)}>
-  内容
-</div>
+```bash
+pnpm dev
+# 或者使用提供的一键启动脚本
+.\start.cmd
 ```
 
-**主题变量**
+项目将在 `http://localhost:5000` 启动。
 
-主题变量定义在 `src/app/globals.css` 中，支持亮色/暗色模式：
+### 生产构建
 
-- `--background`, `--foreground`
-- `--primary`, `--primary-foreground`
-- `--secondary`, `--secondary-foreground`
-- `--muted`, `--muted-foreground`
-- `--accent`, `--accent-foreground`
-- `--destructive`, `--destructive-foreground`
-- `--border`, `--input`, `--ring`
-
-### 5. 表单开发
-
-推荐使用 `react-hook-form` + `zod` 进行表单开发：
-
-```tsx
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-
-const formSchema = z.object({
-  username: z.string().min(2, '用户名至少 2 个字符'),
-  email: z.string().email('请输入有效的邮箱'),
-});
-
-export default function MyForm() {
-  const form = useForm({
-    resolver: zodResolver(formSchema),
-    defaultValues: { username: '', email: '' },
-  });
-
-  const onSubmit = (data: z.infer<typeof formSchema>) => {
-    console.log(data);
-  };
-
-  return (
-    <form onSubmit={form.handleSubmit(onSubmit)}>
-      <Input {...form.register('username')} />
-      <Input {...form.register('email')} />
-      <Button type="submit">提交</Button>
-    </form>
-  );
-}
+```bash
+pnpm build
+pnpm start
 ```
 
-### 6. 数据获取
+## 🎨 代码风格规范
 
-**服务端组件（推荐）**
-
-```tsx
-// src/app/posts/page.tsx
-async function getPosts() {
-  const res = await fetch('https://api.example.com/posts', {
-    cache: 'no-store', // 或 'force-cache'
-  });
-  return res.json();
-}
-
-export default async function PostsPage() {
-  const posts = await getPosts();
-
-  return (
-    <div>
-      {posts.map(post => (
-        <div key={post.id}>{post.title}</div>
-      ))}
-    </div>
-  );
-}
-```
-
-**客户端组件**
-
-```tsx
-'use client';
-
-import { useEffect, useState } from 'react';
-
-export default function ClientComponent() {
-  const [data, setData] = useState(null);
-
-  useEffect(() => {
-    fetch('/api/data')
-      .then(res => res.json())
-      .then(setData);
-  }, []);
-
-  return <div>{JSON.stringify(data)}</div>;
-}
-```
-
-## 常见开发场景
-
-### 添加新页面
-
-1. 在 `src/app/` 下创建文件夹和 `page.tsx`
-2. 使用 shadcn 组件构建 UI
-3. 根据需要添加 `layout.tsx` 和 `loading.tsx`
-
-### 创建业务组件
-
-1. 在 `src/components/` 下创建组件文件（非 UI 组件）
-2. 优先组合使用 `src/components/ui/` 中的基础组件
-3. 使用 TypeScript 定义 Props 类型
-
-### 添加全局状态
-
-推荐使用 React Context 或 Zustand：
-
-```tsx
-// src/lib/store.ts
-import { create } from 'zustand';
-
-interface Store {
-  count: number;
-  increment: () => void;
-}
-
-export const useStore = create<Store>((set) => ({
-  count: 0,
-  increment: () => set((state) => ({ count: state.count + 1 })),
-}));
-```
-
-### 集成数据库
-
-推荐使用 Prisma 或 Drizzle ORM，在 `src/lib/db.ts` 中配置。
-
-## 技术栈
-
-- **框架**: Next.js 16.1.1 (App Router)
-- **UI 组件**: shadcn/ui (基于 Radix UI)
-- **样式**: Tailwind CSS v4
-- **表单**: React Hook Form + Zod
-- **图标**: Lucide React
-- **字体**: Geist Sans & Geist Mono
-- **包管理器**: pnpm 9+
-- **TypeScript**: 5.x
-
-## 参考文档
-
-- [Next.js 官方文档](https://nextjs.org/docs)
-- [shadcn/ui 组件文档](https://ui.shadcn.com)
-- [Tailwind CSS 文档](https://tailwindcss.com/docs)
-- [React Hook Form](https://react-hook-form.com)
-
-## 重要提示
-
-1. **必须使用 pnpm** 作为包管理器
-2. **优先使用 shadcn/ui 组件** 而不是从零开发基础组件
-3. **遵循 Next.js App Router 规范**，正确区分服务端/客户端组件
-4. **使用 TypeScript** 进行类型安全开发
-5. **使用 `@/` 路径别名** 导入模块（已配置）
+- 强制 **TypeScript strict** 模式，禁止隐式 `any`。
+- 组件强制采用极简扁平化 UI：无阴影、极简黑白配色体系。
+- 数据库操作需通过服务端 service_role 访问，结合 Supabase 的 Row Level Security (RLS) 保障数据安全。
+- LLM 交互必须显式声明消息角色类型，支持流式交互响应。

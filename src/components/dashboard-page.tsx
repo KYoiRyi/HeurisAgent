@@ -183,7 +183,7 @@ export default function DashboardPage() {
               <LayoutDashboard className="h-5 w-5 text-primary" />
             </span>
           </div>
-          <h1 className="text-3xl font-semibold md:text-4xl">EduAgentX</h1>
+          <h1 className="text-3xl font-semibold md:text-4xl">启发式学业智能体</h1>
         </div>
         <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 md:min-w-[420px]">
           <MetricPill icon={Brain} label="知识点" value={learningProfile.knowledgePoints.length} />
