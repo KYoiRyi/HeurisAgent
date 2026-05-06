@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from "@/components/ui/select";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -39,24 +42,147 @@ interface ClassroomResource {
   difficulty?: string;
 }
 
+interface ClassroomHistoryItem {
+  id: string;
+  session_id: string | null;
+  subject: string;
+  role: "student" | "agent";
+  content: string;
+  created_at: string;
+  live_component?: LiveComponent | null;
+}
+
+interface StageEvent {
+  id: string;
+  type: string;
+  payload: unknown;
+  ts: string;
+  description?: string;
+}
+
+interface StageMessage {
+  type?: unknown;
+  eventType?: unknown;
+  payload?: unknown;
+  description?: unknown;
+}
+
+const SUBJECTS = ["数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理", "通用"];
+
+declare global {
+  interface Window {
+    HeurisStage?: {
+      emit: (type: string, payload?: unknown) => void;
+      answer: (payload?: unknown) => void;
+      progress: (payload?: unknown) => void;
+    };
+  }
+}
+
+function buildStageSrcDoc(component: LiveComponent): string {
+  const description = JSON.stringify(component.description || "互动黑板");
+  const css = component.css || "";
+  const js = (component.js || "").replace(/<\/script/gi, "<\\/script");
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <style>
+        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 1rem; }
+        ${css}
+      </style>
+    </head>
+    <body>
+      ${component.html}
+      <script>
+        (function () {
+          var stageDescription = ${description};
+          function emit(eventType, payload) {
+            window.parent.postMessage({
+              type: "heuris-stage-event",
+              eventType: eventType || "event",
+              payload: payload == null ? null : payload,
+              description: stageDescription
+            }, "*");
+          }
+          window.HeurisStage = {
+            emit: emit,
+            answer: function (payload) { emit("answer", payload); },
+            progress: function (payload) { emit("progress", payload); }
+          };
+          window.addEventListener("error", function (event) {
+            emit("runtime-error", {
+              message: event.message,
+              line: event.lineno,
+              column: event.colno
+            });
+          });
+          window.addEventListener("unhandledrejection", function (event) {
+            emit("runtime-error", {
+              message: event.reason && event.reason.message ? event.reason.message : String(event.reason)
+            });
+          });
+        })();
+      </script>
+      <script>
+        ${js}
+      </script>
+    </body>
+    </html>
+  `;
+}
+
+function sanitizeVisibleContent(content: string): string {
+  return content
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<think>[\s\S]*$/gi, "")
+    .replace(/<\/think>/gi, "")
+    .trim();
+}
+
+function formatStageEvent(event: StageEvent): string {
+  const payload = stringifyPayload(event.payload);
+  return payload ? `${event.type}: ${payload}` : event.type;
+}
+
+function stringifyPayload(payload: unknown): string {
+  if (payload === null || payload === undefined) return "";
+  if (typeof payload === "string") return payload.slice(0, 80);
+  if (typeof payload === "number" || typeof payload === "boolean") return String(payload);
+  try {
+    return JSON.stringify(payload).slice(0, 100);
+  } catch {
+    return String(payload).slice(0, 100);
+  }
+}
+
 export default function ClassroomPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState("物理");
   const [classroomResources, setClassroomResources] = useState<ClassroomResource[]>([]);
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [resourcesLoading, setResourcesLoading] = useState(false);
+  const [stageEvents, setStageEvents] = useState<StageEvent[]>([]);
+  const [statusHints, setStatusHints] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const stageEventsRef = useRef<StageEvent[]>([]);
 
   const fetchClassroomResources = useCallback(async () => {
     setResourcesLoading(true);
     try {
-      const res = await fetch("/api/resources");
+      const res = await fetch(`/api/resources?subject=${encodeURIComponent(selectedSubject)}`);
       const json = await res.json();
       if (json.success) {
         const docs = (json.data || []).filter((resource: ClassroomResource) =>
-          resource.category === "document" || resource.category === "note"
+          resource.category === "document" ||
+          resource.category === "note" ||
+          resource.category === "knowledge-point"
         );
         setClassroomResources(docs);
         setSelectedResourceId((current) =>
@@ -70,11 +196,71 @@ export default function ClassroomPage() {
     } finally {
       setResourcesLoading(false);
     }
-  }, []);
+  }, [selectedSubject]);
+
+  const fetchClassroomHistory = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/classroom/history?subject=${encodeURIComponent(selectedSubject)}`);
+      const json = await res.json();
+      if (!json.success) return;
+
+      const rows = (json.data || []) as ClassroomHistoryItem[];
+      setMessages(rows.map((row) => ({
+        id: row.id,
+        role: row.role,
+        content: row.content,
+        timestamp: new Date(row.created_at),
+        type: row.role === "student" ? "question" : "answer",
+        liveComponent: row.live_component ?? null,
+      })));
+
+      const latestSession = [...rows].reverse().find((row) => row.session_id)?.session_id ?? null;
+      setSessionId(latestSession);
+      stageEventsRef.current = [];
+      setStageEvents([]);
+    } catch (err) {
+      console.error("Fetch classroom history error:", err);
+    }
+  }, [selectedSubject]);
 
   useEffect(() => {
     fetchClassroomResources();
   }, [fetchClassroomResources]);
+
+  useEffect(() => {
+    fetchClassroomHistory();
+  }, [fetchClassroomHistory]);
+
+  const pushStatusHint = useCallback((hint: string) => {
+    setStatusHints((prev) => [...prev, hint].slice(-6));
+  }, []);
+
+  useEffect(() => {
+    const handleStageMessage = (event: MessageEvent) => {
+      const data = event.data as StageMessage;
+      if (!data || data.type !== "heuris-stage-event") return;
+      const eventType = typeof data.eventType === "string" && data.eventType.trim()
+        ? data.eventType.trim()
+        : "event";
+      const description = typeof data.description === "string" ? data.description : undefined;
+      const nextEvent: StageEvent = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        type: eventType,
+        payload: data.payload ?? null,
+        ts: new Date().toISOString(),
+        description,
+      };
+
+      setStageEvents((prev) => {
+        const next = [...prev, nextEvent].slice(-20);
+        stageEventsRef.current = next;
+        return next;
+      });
+    };
+
+    window.addEventListener("message", handleStageMessage);
+    return () => window.removeEventListener("message", handleStageMessage);
+  }, []);
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -88,6 +274,9 @@ export default function ClassroomPage() {
     setSessionId(fallbackId);
     return fallbackId;
   };
+
+  const activeComponent = [...messages].reverse().find(m => m.liveComponent)?.liveComponent;
+  const selectedResource = classroomResources.find((resource) => resource.id === selectedResourceId) ?? null;
 
   const handleSend = async () => {
     if (!inputValue.trim() || isStreaming) return;
@@ -112,6 +301,7 @@ export default function ClassroomPage() {
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
     setIsStreaming(true);
+    setStatusHints([]);
 
     const agentMessageId = (Date.now() + 1).toString();
     const agentMessage: Message = {
@@ -130,6 +320,13 @@ export default function ClassroomPage() {
         body: JSON.stringify({
           message: userMessage.content,
           sessionId: activeSessionId,
+          subject: selectedSubject,
+          stageEvents: stageEventsRef.current.slice(-12),
+          activeStage: activeComponent
+            ? { description: activeComponent.description }
+            : selectedResource
+              ? { description: `课堂资料：${selectedResource.title}` }
+              : null,
         }),
       });
 
@@ -164,6 +361,10 @@ export default function ClassroomPage() {
               }
               if (data.content !== undefined || data.liveComponent !== undefined) {
                 if (data.content) fullContent += data.content;
+                if (data.liveComponent) {
+                  stageEventsRef.current = [];
+                  setStageEvents([]);
+                }
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === agentMessageId ? { ...m, content: fullContent, liveComponent: data.liveComponent || m.liveComponent } : m
@@ -174,7 +375,20 @@ export default function ClassroomPage() {
                 setIsStreaming(false);
                 void fetchClassroomResources();
               }
+              if (typeof data.status === "string") {
+                pushStatusHint(data.status);
+              }
+              if (data.knowledgeSaved?.points?.length) {
+                pushStatusHint(`知识点已记录：${data.knowledgeSaved.points.join("、")}`);
+              }
+              if (data.memorySaved) {
+                pushStatusHint("学习记忆已更新");
+              }
+              if (data.errorSaved) {
+                pushStatusHint("错题/误区已记录");
+              }
               if (data.resourceSaved) {
+                pushStatusHint("知识点资料已保存");
                 void fetchClassroomResources();
               }
               if (data.error) {
@@ -212,9 +426,6 @@ export default function ClassroomPage() {
     "帮我梳理一下这部分的知识框架",
   ];
 
-  const activeComponent = [...messages].reverse().find(m => m.liveComponent)?.liveComponent;
-  const selectedResource = classroomResources.find((resource) => resource.id === selectedResourceId) ?? null;
-
   return (
     <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col">
       {/* Header */}
@@ -224,12 +435,18 @@ export default function ClassroomPage() {
             <MessageSquareText className="h-8 w-8 text-emerald-500" />
             课堂互动智能体 (Live)
           </h1>
-          <p className="text-muted-foreground mt-2 text-base">沉浸式双屏布局 · 资料与记忆自动联动</p>
+          <p className="text-muted-foreground mt-2 text-base">按学科保留课堂对话 · 知识点/错题/黑板结果自动联动</p>
         </div>
         <div className="flex items-center gap-2">
+          <Select value={selectedSubject} onValueChange={setSelectedSubject} disabled={isStreaming}>
+            <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {SUBJECTS.map((subject) => <SelectItem key={subject} value={subject}>{subject}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <Badge variant="outline" className="h-8 gap-1.5 px-3">
             <Sparkles className="h-3.5 w-3.5" />
-            记忆自动保存
+            只存知识点
           </Badge>
           <Button
             size="sm"
@@ -244,6 +461,16 @@ export default function ClassroomPage() {
           </Button>
         </div>
       </div>
+      {statusHints.length > 0 && (
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {statusHints.map((hint, index) => (
+            <Badge key={`${hint}-${index}`} variant="secondary" className="h-6 px-2 text-[11px]">
+              <Sparkles className="h-3 w-3 mr-1" />
+              {hint}
+            </Badge>
+          ))}
+        </div>
+      )}
 
       {/* Main Split Layout */}
       <ResizablePanelGroup orientation="horizontal" className="flex-1 rounded-lg border">
@@ -258,7 +485,7 @@ export default function ClassroomPage() {
               <FileText className="h-3.5 w-3.5 text-cyan-500" />
               <span className="text-xs font-semibold">课堂资料</span>
               <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                {classroomResources.length}
+                {selectedSubject} · {classroomResources.length}
               </Badge>
               <button
                 onClick={fetchClassroomResources}
@@ -301,25 +528,28 @@ export default function ClassroomPage() {
                 </div>
                 <iframe 
                   className="flex-1 w-full border-0"
-                  srcDoc={`
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                      <style>
-                        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 1rem; }
-                        ${activeComponent.css || ""}
-                      </style>
-                    </head>
-                    <body>
-                      ${activeComponent.html}
-                      <script>
-                        ${activeComponent.js || ""}
-                      </script>
-                    </body>
-                    </html>
-                  `}
+                  srcDoc={buildStageSrcDoc(activeComponent)}
                   sandbox="allow-scripts allow-same-origin"
                 />
+                {stageEvents.length > 0 && (
+                  <div className="border-t bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-3 w-3 text-emerald-500" />
+                      <span className="font-medium text-foreground">交互结果</span>
+                    </div>
+                    <div className="mt-1 flex gap-1.5 overflow-x-auto pb-1">
+                      {stageEvents.slice(-4).map((event) => (
+                        <span
+                          key={event.id}
+                          className="max-w-[16rem] shrink-0 truncate rounded-md border bg-background px-2 py-1"
+                          title={formatStageEvent(event)}
+                        >
+                          {formatStageEvent(event)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : selectedResource ? (
               <div className="h-full w-full overflow-hidden rounded-xl border bg-background flex flex-col">
@@ -328,7 +558,11 @@ export default function ClassroomPage() {
                     <FileText className="h-4 w-4 text-cyan-500" />
                     <h2 className="text-sm font-semibold truncate">{selectedResource.title}</h2>
                     <Badge variant="secondary" className="ml-auto text-[10px]">
-                      {selectedResource.category === "note" ? "学习笔记" : "文档资料"}
+                      {selectedResource.category === "knowledge-point"
+                        ? "知识点"
+                        : selectedResource.category === "note"
+                          ? "学习笔记"
+                          : "文档资料"}
                     </Badge>
                   </div>
                   {selectedResource.tags && selectedResource.tags.length > 0 && (
@@ -364,8 +598,8 @@ export default function ClassroomPage() {
             ) : (
               <div className="text-center text-muted-foreground opacity-50">
                 <MessageSquareText className="h-16 w-16 mx-auto mb-4" />
-                <p>课堂互动内容将在此展示</p>
-                <p className="text-xs mt-2">（例如：模拟实验、图表、交互模型）</p>
+                <p>智能互动黑板将在此展示</p>
+                <p className="text-xs mt-2">模型可生成实验、测验、图表，并读取你的操作结果</p>
               </div>
             )}
           </div>
@@ -402,47 +636,55 @@ export default function ClassroomPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex gap-3 ${msg.role === "student" ? "flex-row-reverse" : ""}`}
-                  >
-                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-1 ${
-                      msg.role === "student"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-emerald-500 text-white"
-                    }`}>
-                      {msg.role === "student" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-                    </div>
-                    <div className={`max-w-[85%] rounded-2xl px-5 py-3 text-[15px] leading-relaxed ${
-                      msg.role === "student"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-background border prose prose-sm dark:prose-invert break-words"
-                    }`}>
-                      {msg.content ? (
-                        msg.role === "student" ? (
-                          msg.content
+                {messages.map((msg) => {
+                  const visibleContent = msg.role === "agent" ? sanitizeVisibleContent(msg.content) : msg.content;
+                  const isPendingAgentMessage =
+                    msg.role === "agent" &&
+                    isStreaming &&
+                    msg.id === messages[messages.length - 1]?.id;
+
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex gap-3 ${msg.role === "student" ? "flex-row-reverse" : ""}`}
+                    >
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-1 ${
+                        msg.role === "student"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-emerald-500 text-white"
+                      }`}>
+                        {msg.role === "student" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                      </div>
+                      <div className={`max-w-[85%] rounded-2xl px-5 py-3 text-[15px] leading-relaxed ${
+                        msg.role === "student"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background border prose prose-sm dark:prose-invert break-words"
+                      }`}>
+                        {visibleContent ? (
+                          msg.role === "student" ? (
+                            visibleContent
+                          ) : (
+                            <div className="w-full space-y-4">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {visibleContent}
+                              </ReactMarkdown>
+                              {msg.liveComponent && (
+                                <Badge variant="secondary" className="mt-2 text-[10px]">
+                                  <Sparkles className="h-3 w-3 mr-1" /> 已更新黑板演示
+                                </Badge>
+                              )}
+                            </div>
+                          )
                         ) : (
-                          <div className="w-full space-y-4">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {msg.content.trim()}
-                            </ReactMarkdown>
-                            {msg.liveComponent && (
-                              <Badge variant="secondary" className="mt-2 text-[10px]">
-                                <Sparkles className="h-3 w-3 mr-1" /> 已更新黑板演示
-                              </Badge>
-                            )}
-                          </div>
-                        )
-                      ) : (
-                        <span className="flex items-center gap-1 text-muted-foreground">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          正在思考及生成交互...
-                        </span>
-                      )}
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            {isPendingAgentMessage && <Loader2 className="h-3 w-3 animate-spin" />}
+                            {isPendingAgentMessage ? "正在生成完整回答..." : "本轮没有可见文本，已保留黑板/记忆结果。"}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             <div ref={scrollRef} className="h-4 shrink-0" />

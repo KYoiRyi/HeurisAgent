@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { llmInvoke } from "@/lib/llm-client";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
+import { reviewPlanStore } from "@/lib/review-plans";
+import { memoryStore } from "@/lib/memory";
 
 const REVIEW_AGENT_SYSTEM_PROMPT = `你是一个专业的复习策略智能体，擅长根据学生学习记录生成个性化复习计划和知识盲点提示。
 
@@ -27,10 +29,13 @@ const REVIEW_AGENT_SYSTEM_PROMPT = `你是一个专业的复习策略智能体�
 export async function POST(request: NextRequest) {
   try {
     const { studentName, subject, forceRegenerate } = await request.json();
+    const planStudentName =
+      typeof studentName === "string" && studentName.trim() ? studentName.trim() : "默认学习者";
+    const planSubject = typeof subject === "string" && subject.trim() ? subject.trim() : "";
 
-    if (!studentName || !subject) {
+    if (!planSubject) {
       return NextResponse.json(
-        { error: "学生姓名和学科不能为空" },
+        { error: "学科不能为空" },
         { status: 400 }
       );
     }
@@ -39,16 +44,20 @@ export async function POST(request: NextRequest) {
 
     // 检查是否有活跃的复习计划（仅当 DB 可用时）
     if (client && !forceRegenerate) {
-      const { data: existingPlan } = await client
+      let query = client
         .from("review_plans")
         .select("*")
-        .eq("student_name", studentName)
-        .eq("subject", subject)
+        .eq("subject", planSubject)
         .eq("status", "active")
-        .maybeSingle();
+        .order("created_at", { ascending: false })
+        .limit(1);
 
-      if (existingPlan) {
-        return NextResponse.json({ success: true, data: existingPlan, cached: true });
+      if (studentName) query = query.eq("student_name", planStudentName);
+
+      const { data: existingPlan } = await query;
+
+      if (existingPlan?.[0]) {
+        return NextResponse.json({ success: true, data: existingPlan[0], cached: true });
       }
     }
 
@@ -68,30 +77,27 @@ export async function POST(request: NextRequest) {
         client
           .from("error_questions")
           .select("error_type, knowledge_points, subject, status, mastered, created_at")
-          .eq("student_name", studentName)
-          .eq("subject", subject)
+          .eq("subject", planSubject)
           .order("created_at", { ascending: false })
           .limit(20),
         client
           .from("learning_records")
           .select("record_type, description, knowledge_point, score, created_at")
-          .eq("student_name", studentName)
-          .eq("subject", subject)
+          .eq("subject", planSubject)
           .eq("record_type", "classroom")
           .order("created_at", { ascending: false })
           .limit(10),
         client
           .from("learning_records")
           .select("record_type, description, created_at")
-          .eq("student_name", studentName)
-          .eq("subject", subject)
+          .eq("subject", planSubject)
           .eq("record_type", "review")
           .order("created_at", { ascending: false })
           .limit(10),
         client
           .from("learning_resources")
           .select("title, subject, tags")
-          .eq("subject", subject)
+          .eq("subject", planSubject)
           .eq("is_shared", true)
           .limit(5),
       ]);
@@ -120,7 +126,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const analysisPrompt = `学生：${studentName}，学科：${subject}
+    if (!client) {
+      const errorMemories = memoryStore.search(`${planSubject} 错题 误区 薄弱点 error-question weakness`, 12);
+      if (errorMemories.length > 0) {
+        errorSummary = `本地错题/薄弱点记忆(${errorMemories.length}条)：${errorMemories
+          .map((memory) => memory.content.replace(/\s+/g, " ").slice(0, 180))
+          .join("；")}`;
+      }
+      const knowledgeMemories = memoryStore.search(`${planSubject} 知识点 knowledge-point`, 12);
+      if (knowledgeMemories.length > 0) {
+        classSummary = `本地知识点记录(${knowledgeMemories.length}条)：${knowledgeMemories
+          .map((memory) => memory.content.replace(/\s+/g, " ").slice(0, 160))
+          .join("；")}`;
+      }
+    }
+
+    const analysisPrompt = `学科：${planSubject}
 
 学习数据分析：
 1. ${errorSummary}
@@ -146,7 +167,7 @@ export async function POST(request: NextRequest) {
       }
     } catch {
       planData = {
-        plan_title: `${subject}复习计划`,
+        plan_title: `${planSubject}复习计划`,
         blind_spots: [],
         priority_topics: [],
         schedule: [],
@@ -164,21 +185,23 @@ export async function POST(request: NextRequest) {
       : 0;
 
     // 保存到 DB（如果可用）
-    let savedPlan: Record<string, unknown> = planData;
+    let savedPlan: unknown = planData;
     if (client) {
-      await client
+      let updateQuery = client
         .from("review_plans")
         .update({ status: "completed" })
-        .eq("student_name", studentName)
-        .eq("subject", subject)
+        .eq("subject", planSubject)
         .eq("status", "active");
+
+      if (studentName) updateQuery = updateQuery.eq("student_name", planStudentName);
+      await updateQuery;
 
       const { data, error } = await client
         .from("review_plans")
         .insert({
-          student_name: studentName,
-          subject,
-          plan_title: (planData.plan_title as string) || `${subject}复习计划`,
+          student_name: planStudentName,
+          subject: planSubject,
+          plan_title: (planData.plan_title as string) || `${planSubject}复习计划`,
           plan_content: (planData.plan_content as string) || "",
           blind_spots: planData.blind_spots || [],
           schedule: planData.schedule || [],
@@ -196,11 +219,11 @@ export async function POST(request: NextRequest) {
       void (async () => {
         try {
           await client.from("learning_records").insert({
-            student_name: studentName,
-            subject,
+            student_name: planStudentName,
+            subject: planSubject,
             record_type: "review",
             agent_type: "review_agent",
-            description: `生成${subject}个性化复习计划`,
+            description: `生成${planSubject}个性化复习计划`,
             details: {
               plan_id: (savedPlan as { id?: string }).id,
               blind_spots_count: Array.isArray(planData.blind_spots)
@@ -217,8 +240,8 @@ export async function POST(request: NextRequest) {
               status: "pending",
               priority: "normal",
               input_data: {
-                student_name: studentName,
-                subject,
+                student_name: planStudentName,
+                subject: planSubject,
                 blind_spots: planData.blind_spots,
                 message: "复习策略智能体发现学生知识盲点，请在后续课堂互动中重点关注",
               },
@@ -228,6 +251,13 @@ export async function POST(request: NextRequest) {
           console.error("[review] Background DB writes failed:", err);
         }
       })();
+    } else {
+      savedPlan = reviewPlanStore.saveActive({
+        studentName: planStudentName,
+        subject: planSubject,
+        planData,
+        totalTasks,
+      });
     }
 
     return NextResponse.json({ success: true, data: savedPlan });
@@ -241,15 +271,19 @@ export async function POST(request: NextRequest) {
 // 获取复习计划列表
 export async function GET(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
-    if (!client) {
-      return NextResponse.json({ success: true, data: [] });
-    }
-
     const { searchParams } = new URL(request.url);
     const studentName = searchParams.get("student_name");
     const subject = searchParams.get("subject");
     const status = searchParams.get("status");
+
+    const client = getSupabaseClient();
+    if (!client) {
+      return NextResponse.json({
+        success: true,
+        data: reviewPlanStore.list({ subject, status }),
+        storage: "local",
+      });
+    }
 
     let query = client
       .from("review_plans")

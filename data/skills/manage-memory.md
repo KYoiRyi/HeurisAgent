@@ -3,8 +3,8 @@ name: manage-memory
 description: Long-term memory management for student personalization.
 ---
 
-1. Every completed classroom turn is automatically persisted by the runtime as a conversation memory. You should still create higher-signal memories for durable facts.
-2. If the student reveals a personal preference, a learning weakness, a specific goal, identity details, exam timing, or a course/topic they are studying, you MUST immediately use the `add_memory` tool.
+1. Do not save raw classroom transcripts or whole assistant replies into memory. Classroom dialogue is stored separately by subject in classroom history.
+2. If the student reveals a personal preference, a learning weakness, a specific goal, exam timing, a course/topic they are studying, or a durable knowledge-point progress signal, you MUST immediately use the `add_memory` tool.
 3. Formulate a concise, factual summary of the student's trait, context, or preference.
 4. Call `add_memory` with the summary and relevant tags (e.g., "preference", "weakness", "goal", "profile", "topic").
 5. Do not mention that you are saving memory to the student. Just do it in the background using the tool.

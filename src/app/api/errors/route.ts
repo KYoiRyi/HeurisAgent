@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { llmInvoke } from "@/lib/llm-client";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
+import { memoryStore, type Memory } from "@/lib/memory";
 
 const ERROR_AGENT_SYSTEM_PROMPT = `你是一个专业的错题管理智能体，擅长错题分析、分类和针对性强化建议生成。
 
@@ -30,6 +31,9 @@ export async function POST(request: NextRequest) {
       sessionId,
       questionId,
     } = await request.json();
+    const errorStudentName =
+      typeof studentName === "string" && studentName.trim() ? studentName.trim() : "默认学习者";
+    const errorSubject = typeof subject === "string" && subject.trim() ? subject.trim() : "通用";
 
     if (!questionText) {
       return NextResponse.json({ error: "题目内容不能为空" }, { status: 400 });
@@ -39,14 +43,15 @@ export async function POST(request: NextRequest) {
 
     // 获取学生历史错题模式（可选）
     let historyContext = "";
-    if (client && studentName && subject) {
-      const { data: pastErrors } = await client
+    if (client && errorSubject) {
+      let query = client
         .from("error_questions")
         .select("error_type, knowledge_points")
-        .eq("student_name", studentName)
-        .eq("subject", subject)
+        .eq("subject", errorSubject)
         .order("created_at", { ascending: false })
         .limit(5);
+      if (studentName) query = query.eq("student_name", errorStudentName);
+      const { data: pastErrors } = await query;
 
       if (pastErrors && pastErrors.length > 0) {
         const errorTypes = pastErrors
@@ -63,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     const analysisPrompt = `请分析以下错题：
 
-学科：${subject || "未知"}
+学科：${errorSubject}
 题目：${questionText}
 ${studentAnswer ? `学生答案：${studentAnswer}` : ""}
 ${correctAnswer ? `正确答案：${correctAnswer}` : ""}
@@ -97,7 +102,18 @@ ${historyContext}
 
     // 更新或创建错题记录（如果 DB 可用）
     let errorRecordId = questionId;
-    if (client) {
+    if (!client) {
+      const localMemory = saveLocalErrorMemory({
+        questionText,
+        studentAnswer,
+        correctAnswer,
+        subject: errorSubject,
+        studentName: errorStudentName,
+        sessionId,
+        analysisResult,
+      });
+      errorRecordId = `local-${localMemory.id}`;
+    } else {
       if (questionId) {
         await client
           .from("error_questions")
@@ -114,8 +130,8 @@ ${historyContext}
         const { data, error } = await client
           .from("error_questions")
           .insert({
-            student_name: studentName || "匿名学生",
-            subject: subject || "通用",
+            student_name: errorStudentName,
+            subject: errorSubject,
             question_text: questionText,
             student_answer: studentAnswer,
             correct_answer: correctAnswer,
@@ -140,8 +156,8 @@ ${historyContext}
         status: "pending",
         priority: "high",
         input_data: {
-          student_name: studentName,
-          subject,
+          student_name: errorStudentName,
+          subject: errorSubject,
           error_id: errorRecordId,
           error_type: analysisResult.error_type,
           knowledge_points: analysisResult.knowledge_points,
@@ -151,8 +167,8 @@ ${historyContext}
 
       // 记录学习行为
       await client.from("learning_records").insert({
-        student_name: studentName || "匿名学生",
-        subject: subject || "通用",
+        student_name: errorStudentName,
+        subject: errorSubject,
         record_type: "error",
         agent_type: "error_agent",
         description: `错题分析：${(questionText as string).substring(0, 80)}`,
@@ -174,16 +190,19 @@ ${historyContext}
 // 获取错题列表
 export async function GET(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
-    if (!client) {
-      return NextResponse.json({ success: true, data: [] });
-    }
-
     const { searchParams } = new URL(request.url);
     const studentName = searchParams.get("student_name");
     const subject = searchParams.get("subject");
     const status = searchParams.get("status");
     const errorType = searchParams.get("error_type");
+
+    const client = getSupabaseClient();
+    if (!client) {
+      return NextResponse.json({
+        success: true,
+        data: listLocalErrors({ studentName, subject, status, errorType }),
+      });
+    }
 
     let query = client
       .from("error_questions")
@@ -204,4 +223,97 @@ export async function GET(request: NextRequest) {
     const message = error instanceof Error ? error.message : "服务器错误";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+function saveLocalErrorMemory(input: {
+  questionText: string;
+  studentAnswer?: string;
+  correctAnswer?: string;
+  subject?: string;
+  studentName?: string;
+  sessionId?: string;
+  analysisResult: Record<string, unknown>;
+}): Memory {
+  const knowledgePoints = normalizeStringArray(input.analysisResult.knowledge_points);
+  const subject = input.subject || "通用";
+  const studentName = input.studentName || "匿名学生";
+
+  return memoryStore.add(
+    [
+      "[错题记录]",
+      `学生：${studentName}`,
+      `学科：${subject}`,
+      `题目：${input.questionText}`,
+      input.studentAnswer ? `学生答案：${input.studentAnswer}` : "",
+      input.correctAnswer ? `正确答案：${input.correctAnswer}` : "",
+      `错误类型：${String(input.analysisResult.error_type || "未分类")}`,
+      `错因分析：${String(input.analysisResult.error_analysis || "")}`,
+      knowledgePoints.length ? `知识点：${knowledgePoints.join("、")}` : "",
+      input.analysisResult.reinforcement_suggestions
+        ? `强化建议：${String(input.analysisResult.reinforcement_suggestions)}`
+        : "",
+      "状态：analyzed",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    {
+      source: "error",
+      session_id: input.sessionId,
+      importance: 3,
+      tags: ["error-question", "weakness", `subject:${subject}`, `student:${studentName}`, ...knowledgePoints],
+    }
+  );
+}
+
+function listLocalErrors(filters: {
+  studentName: string | null;
+  subject: string | null;
+  status: string | null;
+  errorType: string | null;
+}) {
+  return memoryStore
+    .list({ source: "error", limit: 50 })
+    .map(memoryToLocalError)
+    .filter((item) => {
+      if (filters.studentName && item.student_name !== filters.studentName) return false;
+      if (filters.subject && item.subject !== filters.subject) return false;
+      if (filters.status && item.status !== filters.status) return false;
+      if (filters.errorType && item.error_type !== filters.errorType) return false;
+      return true;
+    });
+}
+
+function memoryToLocalError(memory: Memory) {
+  const knowledgePoints = readLocalField(memory.content, "知识点")
+    .split(/[、,，]/)
+    .map((point) => point.trim())
+    .filter(Boolean);
+
+  return {
+    id: `local-${memory.id}`,
+    student_name: readLocalField(memory.content, "学生") || "匿名学生",
+    subject: readLocalField(memory.content, "学科") || "通用",
+    question_text: readLocalField(memory.content, "题目") || memory.content,
+    student_answer: readLocalField(memory.content, "学生答案") || null,
+    correct_answer: readLocalField(memory.content, "正确答案") || null,
+    error_type: readLocalField(memory.content, "错误类型") || "未分类",
+    error_analysis: readLocalField(memory.content, "错因分析") || null,
+    knowledge_points: knowledgePoints,
+    difficulty: "medium",
+    reinforcement_suggestions: readLocalField(memory.content, "强化建议") || null,
+    status: readLocalField(memory.content, "状态") || "analyzed",
+    review_count: 0,
+    mastered: false,
+    created_at: memory.created_at,
+  };
+}
+
+function readLocalField(content: string, field: string): string {
+  const pattern = new RegExp(`^${field}：(.+)$`, "m");
+  return content.match(pattern)?.[1]?.trim() ?? "";
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item).trim()).filter(Boolean);
 }

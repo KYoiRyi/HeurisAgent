@@ -2,22 +2,19 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  BookX, AlertTriangle, CheckCircle2, Clock, Loader2,
-  Search, Plus, Brain, Target, Lightbulb, Filter, RefreshCw
+  BookX, AlertTriangle, CheckCircle2, Loader2,
+  Plus, Brain, Target, Lightbulb, Filter, RefreshCw
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ErrorQuestion {
   id: string;
@@ -38,7 +35,6 @@ interface ErrorQuestion {
 }
 
 const SUBJECTS = ["数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理"];
-const ERROR_TYPES = ["概念错误", "计算错误", "审题不清", "方法错误"];
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
   pending: { label: "待分析", color: "bg-yellow-500/10 text-yellow-600" },
   analyzed: { label: "已分析", color: "bg-blue-500/10 text-blue-600" },
@@ -52,7 +48,6 @@ export default function ErrorsPage() {
   const [analyzing, setAnalyzing] = useState<string | null>(null);
   const [filterSubject, setFilterSubject] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [studentName, setStudentName] = useState("张三");
 
   // 新增错题表单
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -63,7 +58,7 @@ export default function ErrorsPage() {
 
   const fetchErrors = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ student_name: studentName });
+      const params = new URLSearchParams();
       if (filterSubject !== "all") params.set("subject", filterSubject);
       if (filterStatus !== "all") params.set("status", filterStatus);
 
@@ -75,7 +70,7 @@ export default function ErrorsPage() {
     } finally {
       setLoading(false);
     }
-  }, [studentName, filterSubject, filterStatus]);
+  }, [filterSubject, filterStatus]);
 
   useEffect(() => {
     fetchErrors();
@@ -93,7 +88,6 @@ export default function ErrorsPage() {
           studentAnswer: newStudentAnswer,
           correctAnswer: newCorrectAnswer,
           subject: newSubject,
-          studentName,
         }),
       });
       const json = await res.json();
@@ -125,7 +119,6 @@ export default function ErrorsPage() {
           studentAnswer: errorItem.student_answer,
           correctAnswer: errorItem.correct_answer,
           subject: errorItem.subject,
-          studentName: errorItem.student_name,
         }),
       });
       const json = await res.json();
@@ -158,12 +151,6 @@ export default function ErrorsPage() {
           <p className="text-muted-foreground mt-2 text-base">错题收集 · 分类分析 · 针对性强化建议</p>
         </div>
         <div className="flex items-center gap-2">
-          <Input
-            placeholder="学生姓名"
-            value={studentName}
-            onChange={(e) => setStudentName(e.target.value)}
-            className="w-28"
-          />
           <Button variant="outline" onClick={fetchErrors}>
             <RefreshCw className="h-4 w-4 mr-1" />刷新
           </Button>

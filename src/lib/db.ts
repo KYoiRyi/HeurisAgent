@@ -124,6 +124,49 @@ export function getDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS learning_resources_subject_idx ON learning_resources(subject);
     CREATE INDEX IF NOT EXISTS learning_resources_category_idx ON learning_resources(category);
     CREATE INDEX IF NOT EXISTS learning_resources_created_idx ON learning_resources(created_at DESC);
+
+    -- ── Local classroom transcript history ─────────────────────────────────
+    -- Full classroom turns live here, grouped by subject. They are deliberately
+    -- separate from memories so long-term recall stays focused on knowledge,
+    -- weaknesses, preferences, and errors instead of raw transcripts.
+    CREATE TABLE IF NOT EXISTS classroom_history (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id  TEXT,
+      subject     TEXT    NOT NULL,
+      role        TEXT    NOT NULL,          -- student|agent
+      content     TEXT    NOT NULL,
+      message_type TEXT   NOT NULL DEFAULT 'message',
+      related_knowledge_points TEXT NOT NULL DEFAULT '[]',
+      live_component TEXT,
+      created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS classroom_history_subject_idx ON classroom_history(subject);
+    CREATE INDEX IF NOT EXISTS classroom_history_created_idx ON classroom_history(created_at DESC);
+    CREATE INDEX IF NOT EXISTS classroom_history_session_idx ON classroom_history(session_id);
+
+    -- ── Local review plan fallback ─────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS review_plans (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      student_name TEXT   NOT NULL DEFAULT '默认学习者',
+      subject     TEXT    NOT NULL,
+      plan_title  TEXT    NOT NULL,
+      plan_content TEXT   NOT NULL DEFAULT '',
+      blind_spots TEXT    NOT NULL DEFAULT '[]',
+      schedule    TEXT    NOT NULL DEFAULT '[]',
+      priority_topics TEXT NOT NULL DEFAULT '[]',
+      review_strategy TEXT,
+      progress    INTEGER NOT NULL DEFAULT 0,
+      total_tasks INTEGER NOT NULL DEFAULT 0,
+      completed_tasks INTEGER NOT NULL DEFAULT 0,
+      status      TEXT    NOT NULL DEFAULT 'active',
+      created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS review_plans_subject_idx ON review_plans(subject);
+    CREATE INDEX IF NOT EXISTS review_plans_status_idx ON review_plans(status);
+    CREATE INDEX IF NOT EXISTS review_plans_created_idx ON review_plans(created_at DESC);
   `);
 
   return _db;

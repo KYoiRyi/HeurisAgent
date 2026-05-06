@@ -3,15 +3,12 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   CalendarClock, Brain, Target, Sparkles, Loader2, RefreshCw,
-  CheckCircle2, Clock, AlertCircle, Lightbulb, ArrowRight,
-  BookOpen
+  Clock, AlertCircle, Lightbulb, ArrowRight
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
@@ -39,12 +36,12 @@ export default function ReviewPage() {
   const [plans, setPlans] = useState<ReviewPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [studentName, setStudentName] = useState("张三");
   const [selectedSubject, setSelectedSubject] = useState("数学");
 
   const fetchPlans = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch(`/api/review?student_name=${encodeURIComponent(studentName)}`);
+      const res = await fetch(`/api/review?subject=${encodeURIComponent(selectedSubject)}`);
       const json = await res.json();
       if (json.success) setPlans(json.data);
     } catch (err) {
@@ -52,7 +49,7 @@ export default function ReviewPage() {
     } finally {
       setLoading(false);
     }
-  }, [studentName]);
+  }, [selectedSubject]);
 
   useEffect(() => {
     fetchPlans();
@@ -65,7 +62,6 @@ export default function ReviewPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          studentName,
           subject: selectedSubject,
           forceRegenerate: true,
         }),
@@ -95,12 +91,6 @@ export default function ReviewPage() {
           <p className="text-muted-foreground mt-2 text-base">个性化复习计划 · 知识盲点提示 · 艾宾浩斯遗忘曲线</p>
         </div>
         <div className="flex items-center gap-2">
-          <Input
-            placeholder="学生姓名"
-            value={studentName}
-            onChange={(e) => setStudentName(e.target.value)}
-            className="w-28"
-          />
           <Select value={selectedSubject} onValueChange={setSelectedSubject}>
             <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
             <SelectContent>

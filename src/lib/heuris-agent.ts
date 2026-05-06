@@ -209,7 +209,7 @@ export function buildClassroomTools(context: ClassroomToolContext = {}): AgentTo
   const renderLiveComponent: AgentTool<typeof RenderLiveComponentSchema> = {
     name: "render_live_component",
     label: "Render Live Component",
-    description: "Generate a live interactive UI component (HTML/JS) to render on the Stage. Use this to show simulations, interactive widgets, or dynamic web elements to the student.",
+    description: "Generate a live interactive UI component (HTML/CSS/vanilla JS) to render on the Stage. Use it for simulations, quizzes, graphs, labs, and widgets. JS should call window.HeurisStage.emit(type, payload) for student answers, progress, scores, measurements, and misconceptions so future turns can read the results.",
     parameters: RenderLiveComponentSchema,
     execute: async (_id, params: Static<typeof RenderLiveComponentSchema>) => {
       // The actual rendering happens on the frontend via the SSE event stream parsing the tool call.
@@ -249,17 +249,23 @@ export function buildClassroomTools(context: ClassroomToolContext = {}): AgentTo
   const saveResourceTool: AgentTool<typeof SaveResourceSchema> = {
     name: "save_learning_resource",
     label: "Save Learning Resource",
-    description: "Save a structured learning resource (like a PPT slide or summary note) to the class database.",
+    description: "Save a structured knowledge-point resource to the class database. Only use it for concrete knowledge points, formulas, laws, concepts, methods, examples, or Stage experiment conclusions. Do not save ordinary chat transcripts or vague summaries.",
     parameters: SaveResourceSchema,
     execute: async (_id, params: Static<typeof SaveResourceSchema>) => {
+      if (!isKnowledgeResource(params)) {
+        return {
+          content: [{ type: "text", text: "Skipped resource save: no concrete knowledge point was found." }],
+          details: { saved: false, skipped: true, reason: "missing_knowledge_point", title: params.title },
+        };
+      }
       const client = getSupabaseClient();
       if (!client) {
         const resource = resourceStore.add({
           title: params.title,
           content: params.content,
           subject: params.subject,
-          category: "note",
-          tags: params.tags,
+          category: "knowledge-point",
+          tags: ["knowledge-point", ...params.tags],
           created_by: "classroom_agent",
         });
         return {
@@ -272,8 +278,8 @@ export function buildClassroomTools(context: ClassroomToolContext = {}): AgentTo
           title: params.title,
           content: params.content,
           subject: params.subject,
-          category: "note",
-          tags: params.tags,
+          category: "knowledge-point",
+          tags: ["knowledge-point", ...params.tags],
           created_by: "classroom_agent",
         }).select();
         if (error) throw new Error(error.message);
@@ -287,8 +293,8 @@ export function buildClassroomTools(context: ClassroomToolContext = {}): AgentTo
           title: params.title,
           content: params.content,
           subject: params.subject,
-          category: "note",
-          tags: params.tags,
+          category: "knowledge-point",
+          tags: ["knowledge-point", ...params.tags],
           created_by: "classroom_agent",
         });
         return {
@@ -317,7 +323,11 @@ export function buildClassroomTools(context: ClassroomToolContext = {}): AgentTo
     execute: async (_id, params: Static<typeof SaveErrorSchema>) => {
       const client = getSupabaseClient();
       if (!client) {
-         return { content: [{ type: "text", text: "Database client unavailable." }], details: { error: true } };
+        const memory = saveErrorQuestionMemory(params, context.sessionId);
+        return {
+          content: [{ type: "text", text: "Saved error record to local memory fallback." }],
+          details: { saved: true, local: true, memoryId: memory.id, ...params },
+        };
       }
       try {
         await client.from("error_questions").insert({
@@ -332,16 +342,57 @@ export function buildClassroomTools(context: ClassroomToolContext = {}): AgentTo
         console.log(`[Classroom] Logged error for ${params.student_name}`);
         return {
           content: [{ type: "text", text: `Successfully logged error record for ${params.student_name}` }],
-          details: params,
+          details: { saved: true, ...params },
         };
       } catch (err) {
-        return { content: [{ type: "text", text: `Failed to save error: ${String(err)}` }], details: { error: err } };
+        const memory = saveErrorQuestionMemory(params, context.sessionId);
+        return {
+          content: [{ type: "text", text: `Saved error to local memory after database error: ${String(err)}` }],
+          details: { saved: true, local: true, memoryId: memory.id, warning: String(err), ...params },
+        };
       }
     },
   };
 
   // 3. We also expose addMemoryTool to classroom agent
   return [renderLiveComponent, searchMemoryTool, addMemoryTool, saveResourceTool, saveErrorTool];
+}
+
+function isKnowledgeResource(params: { title: string; content: string; tags: string[] }): boolean {
+  const combined = `${params.title}\n${params.content}\n${params.tags.join(" ")}`;
+  return /知识点|概念|定律|公式|原理|规则|方法|模型|例题|实验|结论|误区|错因|法则|单位|性质|推导|knowledge|concept|formula|law|principle/i.test(combined);
+}
+
+function saveErrorQuestionMemory(
+  params: {
+    student_name: string;
+    subject: string;
+    question_text: string;
+    student_answer?: string;
+    error_type: string;
+    error_analysis: string;
+  },
+  sessionId?: string
+) {
+  return memoryStore.add(
+    [
+      "[错题记录]",
+      `学生：${params.student_name}`,
+      `学科：${params.subject}`,
+      `题目：${params.question_text}`,
+      params.student_answer ? `学生答案：${params.student_answer}` : "",
+      `错误类型：${params.error_type}`,
+      `错因分析：${params.error_analysis}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    {
+      source: "error",
+      importance: 3,
+      session_id: sessionId,
+      tags: ["error-question", "weakness", `subject:${params.subject}`, `student:${params.student_name}`],
+    }
+  );
 }
 
 // ── HeurisAgentRuntime ────────────────────────────────────────────────────────
