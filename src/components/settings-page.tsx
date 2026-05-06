@@ -64,6 +64,18 @@ const PROVIDERS: ProviderPreset[] = [
     requiresKey: true,
   },
   {
+    id: "minimax",
+    label: "MiniMax",
+    baseUrl: "https://api.minimaxi.com/v1",
+    defaultModel: "MiniMax-M2.7",
+    apiKeyPlaceholder: "sk-...",
+    docsUrl: "https://www.minimaxi.com",
+    description: "MiniMax 海螺 AI 大模型",
+    color: "from-pink-500 to-rose-600",
+    models: ["MiniMax-M2.7"],
+    requiresKey: true,
+  },
+  {
     id: "lmstudio",
     label: "LM Studio",
     baseUrl: "http://localhost:1234/v1",

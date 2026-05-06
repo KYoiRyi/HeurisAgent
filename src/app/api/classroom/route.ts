@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { llmStream } from "@/lib/llm-client";
+import { llmInvoke } from "@/lib/llm-client";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
 
 const CLASSROOM_SYSTEM_PROMPT = `你是一个专业的课堂互动智能体，擅长实时提问解答和知识点联动讲解。
@@ -97,12 +97,12 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         let fullContent = "";
         try {
-          for await (const chunk of llmStream(messages, { temperature: 0.7 })) {
-            fullContent += chunk;
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`)
-            );
-          }
+          const response = await llmInvoke(messages, { temperature: 0.7 });
+          fullContent = response.content;
+          
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ content: fullContent })}\n\n`)
+          );
 
           // 异步保存记录（不阻塞响应）
           if (client) {

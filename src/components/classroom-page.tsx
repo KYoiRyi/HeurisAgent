@@ -14,6 +14,8 @@ import { Separator } from "@/components/ui/separator";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Message {
   id: string;
@@ -265,7 +267,17 @@ export default function ClassroomPage() {
                           ? "bg-primary text-primary-foreground"
                           : "bg-muted"
                       }`}>
-                        {msg.content || (
+                        {msg.content ? (
+                          msg.role === "student" ? (
+                            msg.content
+                          ) : (
+                            <div className="w-full space-y-4 prose prose-sm dark:prose-invert max-w-none break-words">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {msg.content.replace(/<think>[\s\S]*?<\/think>/g, "").trim()}
+                              </ReactMarkdown>
+                            </div>
+                          )
+                        ) : (
                           <span className="flex items-center gap-1 text-muted-foreground">
                             <Loader2 className="h-3 w-3 animate-spin" />
                             正在思考...
