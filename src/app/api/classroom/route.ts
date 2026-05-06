@@ -72,11 +72,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 构建 LLM 消息
-    const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-      { role: "system", content: CLASSROOM_SYSTEM_PROMPT },
+    const messages: Array<{ role: "system" | "user" | "assistant"; content: string; tool_calls?: any }> = [
       {
         role: "system",
-        content: `${sessionContext}${resourceContext}\n\n学科：${subject || "通用"}，学生：${studentName || "同学"}`,
+        content: CLASSROOM_SYSTEM_PROMPT + "\n\n" + `${sessionContext}${resourceContext}\n\n学科：${subject || "通用"}，学生：${studentName || "同学"}\n\nIf you need to show an interactive simulation, diagram, or applet, you MUST call the render_live_component tool! Do NOT write markdown code blocks for interactive apps.`
       },
     ];
 
@@ -97,11 +96,47 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         let fullContent = "";
         try {
-          const response = await llmInvoke(messages, { temperature: 0.7 });
+          const classroomTools = [
+            {
+              type: "function",
+              function: {
+                name: "render_live_component",
+                description: "Generate a live interactive UI component (HTML/JS) to render on the Stage. Use this to show simulations, interactive widgets, or dynamic web elements to the student.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    html: { type: "string", description: "The HTML structure of the interactive component" },
+                    css: { type: "string", description: "Any custom CSS styles (vanilla CSS)" },
+                    js: { type: "string", description: "Vanilla JavaScript to make the component interactive. Do not use window.onload or DOMContentLoaded, just write the script." },
+                    description: { type: "string", description: "A brief description of what this component is" }
+                  },
+                  required: ["html", "description"]
+                }
+              }
+            }
+          ];
+
+          const response = await llmInvoke(messages, { 
+            temperature: 0.7,
+            tools: classroomTools
+          });
+          
           fullContent = response.content;
+          let liveComponent = null;
+
+          if (response.tool_calls && response.tool_calls.length > 0) {
+            const tc = response.tool_calls[0];
+            if (tc.function?.name === "render_live_component") {
+              try {
+                liveComponent = JSON.parse(tc.function.arguments);
+              } catch (e) {
+                console.error("Failed to parse tool call arguments", e);
+              }
+            }
+          }
           
           controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ content: fullContent })}\n\n`)
+            encoder.encode(`data: ${JSON.stringify({ content: fullContent, liveComponent })}\n\n`)
           );
 
           // 异步保存记录（不阻塞响应）

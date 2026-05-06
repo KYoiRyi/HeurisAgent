@@ -156,29 +156,99 @@ class AgentRuntime {
         { role: "user", content: prompt },
       ];
 
-      const response = await llmInvoke(messages, { temperature: 0.5 });
-      const result = response.content;
+      let finalResult = "";
+      let iterations = 0;
+      let totalTokens = 0;
+
+      const backgroundTools = [
+        {
+          type: "function",
+          function: {
+            name: "add_memory",
+            description: "Save an important piece of information to your long-term memory for future use.",
+            parameters: {
+              type: "object",
+              properties: {
+                content: { type: "string", description: "The content to remember." },
+                tags: { type: "array", items: { type: "string" }, description: "Array of topic tags." }
+              },
+              required: ["content"]
+            }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "schedule_cron_job",
+            description: "Schedule a future background task for yourself.",
+            parameters: {
+              type: "object",
+              properties: {
+                name: { type: "string", description: "Name of the task." },
+                schedule: { type: "string", description: "When to run, e.g. 'every 2h', 'daily'." },
+                prompt: { type: "string", description: "The instructions for the background task." }
+              },
+              required: ["name", "schedule", "prompt"]
+            }
+          }
+        }
+      ];
+
+      while (iterations < 5) {
+        const response = await llmInvoke(messages, { temperature: 0.5, tools: backgroundTools });
+        if (response.content) {
+          finalResult += (finalResult ? "\n" : "") + response.content;
+        }
+        totalTokens += response.usage?.total_tokens ?? 0;
+
+        if (response.tool_calls && response.tool_calls.length > 0) {
+          for (const tc of response.tool_calls) {
+            let toolOutput = "";
+            try {
+              const args = JSON.parse(tc.function.arguments);
+              if (tc.function.name === "add_memory") {
+                memoryStore.add(args.content, { source: "cron_tool", importance: 2, tags: args.tags || [] });
+                toolOutput = "Memory saved successfully.";
+                console.log(`[AgentRuntime] Tool call: add_memory (${args.content})`);
+              } else if (tc.function.name === "schedule_cron_job") {
+                db.prepare(`
+                  INSERT INTO cron_jobs (name, schedule, prompt, enabled, next_run)
+                  VALUES (?, ?, ?, 1, ?)
+                `).run(args.name, args.schedule, args.prompt, computeNextRun(args.schedule));
+                toolOutput = `Cron job '${args.name}' scheduled.`;
+                console.log(`[AgentRuntime] Tool call: schedule_cron_job (${args.name})`);
+              }
+            } catch (e) {
+              toolOutput = "Error executing tool: " + String(e);
+            }
+            messages.push({ role: "system", content: `Tool ${tc.function?.name} result: ${toolOutput}` });
+          }
+          iterations++;
+        } else {
+          break;
+        }
+      }
 
       db.prepare(`
         UPDATE task_runs SET status='done', result=?, finished_at=datetime('now'), tokens_used=?
         WHERE id=?
-      `).run(result, response.usage?.total_tokens ?? 0, runId);
+      `).run(finalResult, totalTokens, runId);
 
       // Auto-store notable results as memories
-      if (result.length > 50) {
+      if (finalResult.length > 50) {
         memoryStore.add(
-          `[任务结果] ${prompt.substring(0, 60)}…\n${result.substring(0, 300)}`,
+          `[任务结果] ${prompt.substring(0, 60)}…\n${finalResult.substring(0, 300)}`,
           { source: "cron", importance: 1, tags: ["task-result"] }
         );
       }
 
       agentEvents.emit({
         type: "task_done",
-        payload: { runId, result: result.substring(0, 500) },
+        payload: { runId, result: finalResult.substring(0, 500) },
         ts: new Date().toISOString(),
       });
 
-      return result;
+      return finalResult;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       db.prepare(`

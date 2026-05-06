@@ -20,6 +20,8 @@ export interface LLMOptions {
   model?: string;
   temperature?: number;
   max_tokens?: number;
+  tools?: any[];
+  tool_choice?: string | object;
 }
 
 export interface LLMResponse {
@@ -30,6 +32,7 @@ export interface LLMResponse {
     completion_tokens: number;
     total_tokens: number;
   };
+  tool_calls?: any[];
 }
 
 interface LLMConfig {
@@ -106,6 +109,8 @@ export async function llmInvoke(
       messages: sanitizeMessages(messages),
       temperature: temp,
       max_tokens: options.max_tokens,
+      tools: options.tools,
+      tool_choice: options.tool_choice,
       stream: false,
       ...(isMiniMax ? { reasoning_split: true } : {}), // For MiniMax reasoning models compatibility
     }),
@@ -128,7 +133,12 @@ export async function llmInvoke(
     }
   }
 
-  return { content, model: data.model ?? model, usage: data.usage };
+  return { 
+    content, 
+    model: data.model ?? model, 
+    usage: data.usage,
+    tool_calls: data.choices?.[0]?.message?.tool_calls
+  };
 }
 
 /** Streaming chat — yields text delta chunks */

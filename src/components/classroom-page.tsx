@@ -11,11 +11,19 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+interface LiveComponent {
+  html: string;
+  css?: string;
+  js?: string;
+  description: string;
+}
 
 interface Message {
   id: string;
@@ -23,6 +31,7 @@ interface Message {
   content: string;
   timestamp: Date;
   type?: string;
+  liveComponent?: LiveComponent | null;
 }
 
 const SUBJECTS = ["数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理"];
@@ -104,11 +113,11 @@ export default function ClassroomPage() {
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
-              if (data.content) {
-                fullContent += data.content;
+              if (data.content !== undefined || data.liveComponent !== undefined) {
+                if (data.content) fullContent += data.content;
                 setMessages((prev) =>
                   prev.map((m) =>
-                    m.id === agentMessageId ? { ...m, content: fullContent } : m
+                    m.id === agentMessageId ? { ...m, content: fullContent, liveComponent: data.liveComponent || m.liveComponent } : m
                   )
                 );
               }
@@ -172,16 +181,18 @@ export default function ClassroomPage() {
     "帮我梳理一下这部分的知识框架",
   ];
 
+  const activeComponent = [...messages].reverse().find(m => m.liveComponent)?.liveComponent;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <MessageSquareText className="h-6 w-6 text-emerald-500" />
-            课堂互动智能体
+            课堂互动智能体 (Live)
           </h1>
-          <p className="text-muted-foreground mt-1">实时提问解答 · 知识点联动讲解 · 启发式引导</p>
+          <p className="text-muted-foreground mt-1 text-sm">沉浸式双屏布局 · 实时互动生成</p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={subject} onValueChange={setSubject}>
@@ -214,171 +225,150 @@ export default function ClassroomPage() {
         </div>
       </div>
 
-      {/* Chat Area */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Main Chat */}
-        <Card className="lg:col-span-3">
-          <CardContent className="p-0">
-            <ScrollArea className="h-[520px] p-4" ref={scrollRef}>
-              {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-[480px] text-center">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/20 mb-4">
-                    <Bot className="h-8 w-8 text-emerald-500" />
-                  </div>
-                  <h3 className="text-lg font-semibold">课堂互动智能体</h3>
-                  <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                    我是你的课堂助教，可以实时解答问题、联动讲解知识点、启发式引导思考。试试向我提问吧！
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-6 w-full max-w-lg">
-                    {quickQuestions.map((q) => (
-                      <Button
-                        key={q}
-                        variant="outline"
-                        size="sm"
-                        className="justify-start text-xs h-auto py-2"
-                        onClick={() => { setInputValue(q); }}
-                      >
-                        <Lightbulb className="h-3 w-3 mr-1.5 text-amber-500 shrink-0" />
-                        {q}
-                      </Button>
-                    ))}
-                  </div>
+      {/* Main Split Layout */}
+      <ResizablePanelGroup direction="horizontal" className="flex-1 rounded-lg border">
+        {/* Stage Pane */}
+        <ResizablePanel defaultSize={50} minSize={30} className="bg-background flex flex-col relative">
+          <div className="flex items-center p-3 border-b shrink-0 bg-muted/30">
+            <Bot className="h-4 w-4 mr-2 text-emerald-500" />
+            <span className="text-sm font-semibold">互动黑板 (Stage)</span>
+          </div>
+          <div className="flex-1 relative overflow-hidden flex items-center justify-center p-4 bg-dot-pattern">
+            {activeComponent ? (
+              <div className="w-full h-full rounded-xl overflow-hidden border shadow-sm flex flex-col bg-white">
+                <div className="px-3 py-1.5 bg-muted/50 border-b text-xs text-muted-foreground flex items-center">
+                  <Lightbulb className="h-3 w-3 mr-1" />
+                  {activeComponent.description}
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`flex gap-3 ${msg.role === "student" ? "flex-row-reverse" : ""}`}
+                <iframe 
+                  className="flex-1 w-full border-0"
+                  srcDoc={`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                      <style>
+                        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 1rem; }
+                        ${activeComponent.css || ""}
+                      </style>
+                    </head>
+                    <body>
+                      ${activeComponent.html}
+                      <script>
+                        ${activeComponent.js || ""}
+                      </script>
+                    </body>
+                    </html>
+                  `}
+                  sandbox="allow-scripts allow-same-origin"
+                />
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground opacity-50">
+                <MessageSquareText className="h-16 w-16 mx-auto mb-4" />
+                <p>课堂互动内容将在此展示</p>
+                <p className="text-xs mt-2">（例如：模拟实验、图表、交互模型）</p>
+              </div>
+            )}
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle withHandle />
+
+        {/* Chat Pane */}
+        <ResizablePanel defaultSize={50} minSize={30} className="flex flex-col bg-muted/10">
+          <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center py-20">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/20 mb-4">
+                  <Bot className="h-8 w-8 text-emerald-500" />
+                </div>
+                <h3 className="text-lg font-semibold">课堂互动智能体</h3>
+                <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                  我是你的课堂助教，可以实时解答问题、联动讲解知识点、并在黑板上生成交互式演示。
+                </p>
+                <div className="grid grid-cols-1 gap-2 mt-6 w-full max-w-sm">
+                  {quickQuestions.map((q) => (
+                    <Button
+                      key={q}
+                      variant="outline"
+                      size="sm"
+                      className="justify-start text-xs h-auto py-2"
+                      onClick={() => { setInputValue(q); }}
                     >
-                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                        msg.role === "student"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white"
-                      }`}>
-                        {msg.role === "student" ? (
-                          <User className="h-4 w-4" />
-                        ) : (
-                          <Bot className="h-4 w-4" />
-                        )}
-                      </div>
-                      <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${
-                        msg.role === "student"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted"
-                      }`}>
-                        {msg.content ? (
-                          msg.role === "student" ? (
-                            msg.content
-                          ) : (
-                            <div className="w-full space-y-4 prose prose-sm dark:prose-invert max-w-none break-words">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {msg.content.replace(/<think>[\s\S]*?<\/think>/g, "").trim()}
-                              </ReactMarkdown>
-                            </div>
-                          )
-                        ) : (
-                          <span className="flex items-center gap-1 text-muted-foreground">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            正在思考...
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                      <Lightbulb className="h-3 w-3 mr-1.5 text-amber-500 shrink-0" />
+                      {q}
+                    </Button>
                   ))}
                 </div>
-              )}
-            </ScrollArea>
-
-            <Separator />
-
-            {/* Input Area */}
-            <div className="p-4">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="输入你的问题..."
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                  disabled={isStreaming}
-                  className="flex-1"
-                />
-                <Button onClick={handleSend} disabled={isStreaming || !inputValue.trim()}>
-                  {isStreaming ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Sidebar */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">课堂信息</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">学科</span>
-                <Badge variant="secondary">{subject}</Badge>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">学生</span>
-                <span className="font-medium">{studentName}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">消息数</span>
-                <span className="font-medium">{messages.length}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">课堂状态</span>
-                <Badge variant={sessionId ? "default" : "outline"} className="text-[10px]">
-                  {sessionId ? "进行中" : "未开始"}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">知识点提示</CardTitle>
-              <CardDescription className="text-xs">智能体识别的关联知识点</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-1.5">
-                {["代数运算", "方程求解", "函数图像", "几何证明"].map((point) => (
-                  <Badge key={point} variant="outline" className="text-[10px]">{point}</Badge>
+            ) : (
+              <div className="space-y-4">
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex gap-3 ${msg.role === "student" ? "flex-row-reverse" : ""}`}
+                  >
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-1 ${
+                      msg.role === "student"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white"
+                    }`}>
+                      {msg.role === "student" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                    </div>
+                    <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
+                      msg.role === "student"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background border shadow-sm prose prose-sm dark:prose-invert break-words"
+                    }`}>
+                      {msg.content ? (
+                        msg.role === "student" ? (
+                          msg.content
+                        ) : (
+                          <div className="w-full space-y-4">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {msg.content.replace(/<think>[\s\S]*?<\/think>/g, "").trim()}
+                            </ReactMarkdown>
+                            {msg.liveComponent && (
+                              <Badge variant="secondary" className="mt-2 text-[10px]">
+                                <Sparkles className="h-3 w-3 mr-1" /> 已更新黑板演示
+                              </Badge>
+                            )}
+                          </div>
+                        )
+                      ) : (
+                        <span className="flex items-center gap-1 text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          正在思考及生成交互...
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">智能体能力</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {[
-                { icon: Lightbulb, label: "启发式提问引导", desc: "引导主动思考" },
-                { icon: BookOpen, label: "知识点联动", desc: "构建知识网络" },
-                { icon: ArrowRight, label: "多角度讲解", desc: "丰富理解维度" },
-              ].map((ability) => (
-                <div key={ability.label} className="flex items-center gap-2 text-xs">
-                  <ability.icon className="h-3.5 w-3.5 text-emerald-500" />
-                  <div>
-                    <p className="font-medium">{ability.label}</p>
-                    <p className="text-muted-foreground">{ability.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            )}
+          </ScrollArea>
+          
+          <div className="p-3 bg-background border-t">
+            <div className="flex gap-2">
+              <Input
+                placeholder="输入你的问题..."
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                disabled={isStreaming}
+                className="flex-1"
+              />
+              <Button onClick={handleSend} disabled={isStreaming || !inputValue.trim()}>
+                {isStreaming ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
