@@ -9,6 +9,7 @@ export interface ClassroomHistoryMessage {
   message_type: string;
   related_knowledge_points: string[];
   live_component: Record<string, string> | null;
+  tool_calls: Record<string, unknown>[];
   created_at: string;
 }
 
@@ -20,6 +21,7 @@ interface AddClassroomHistoryInput {
   messageType?: string;
   knowledgePoints?: string[];
   liveComponent?: Record<string, string> | null;
+  toolCalls?: Record<string, unknown>[];
 }
 
 class ClassroomHistoryStore {
@@ -28,8 +30,8 @@ class ClassroomHistoryStore {
     const result = db
       .prepare(
         `INSERT INTO classroom_history
-          (session_id, subject, role, content, message_type, related_knowledge_points, live_component)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+          (session_id, subject, role, content, message_type, related_knowledge_points, live_component, tool_calls)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.sessionId ?? null,
@@ -38,7 +40,8 @@ class ClassroomHistoryStore {
         input.content.trim(),
         input.messageType ?? "message",
         JSON.stringify(input.knowledgePoints ?? []),
-        input.liveComponent ? JSON.stringify(input.liveComponent) : null
+        input.liveComponent ? JSON.stringify(input.liveComponent) : null,
+        JSON.stringify(input.toolCalls ?? [])
       );
 
     return this.getById(result.lastInsertRowid as number)!;
@@ -98,6 +101,7 @@ interface RawClassroomHistory {
   message_type: string;
   related_knowledge_points: string;
   live_component: string | null;
+  tool_calls: string;
   created_at: string;
 }
 
@@ -111,6 +115,7 @@ function toHistoryMessage(row: RawClassroomHistory): ClassroomHistoryMessage {
     message_type: row.message_type,
     related_knowledge_points: parseJsonArray(row.related_knowledge_points),
     live_component: parseLiveComponent(row.live_component),
+    tool_calls: parseJsonRecords(row.tool_calls),
     created_at: row.created_at,
   };
 }
@@ -131,6 +136,17 @@ function parseLiveComponent(value: string | null): Record<string, string> | null
     return typeof parsed === "object" && parsed !== null ? parsed as Record<string, string> : null;
   } catch {
     return null;
+  }
+}
+
+function parseJsonRecords(value: string): Record<string, unknown>[] {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+      : [];
+  } catch {
+    return [];
   }
 }
 

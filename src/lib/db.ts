@@ -138,6 +138,7 @@ export function getDb(): Database.Database {
       message_type TEXT   NOT NULL DEFAULT 'message',
       related_knowledge_points TEXT NOT NULL DEFAULT '[]',
       live_component TEXT,
+      tool_calls TEXT NOT NULL DEFAULT '[]',
       created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -169,7 +170,15 @@ export function getDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS review_plans_created_idx ON review_plans(created_at DESC);
   `);
 
+  ensureColumn(_db, "classroom_history", "tool_calls", "TEXT NOT NULL DEFAULT '[]'");
+
   return _db;
+}
+
+function ensureColumn(db: Database.Database, table: string, column: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (columns.some((item) => item.name === column)) return;
+  db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
 }
 
 /** Close the database (used in tests / graceful shutdown) */

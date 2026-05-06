@@ -15,3 +15,4 @@ For every classroom turn:
 8. If the student asks to continue, use memory and classroom history to continue from the last topic instead of asking them to repeat it.
 9. If `<stage-context>` is present, use the student's Stage actions/results as evidence for the next explanation, notes, knowledge-point tracking, and error recording.
 10. For any lesson that can be practiced visually or interactively, use `render_live_component` so the Stage becomes the classroom interactor instead of a static blackboard.
+11. The runtime displays every tool call to the student, so use tools intentionally with clear, compact arguments.

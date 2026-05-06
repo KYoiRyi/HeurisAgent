@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   MessageSquareText, Send, Bot, User, Sparkles,
-  Lightbulb, Loader2, FileText, RefreshCw
+  Lightbulb, Loader2, FileText, RefreshCw, Wrench, CheckCircle2, XCircle, Terminal
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,17 @@ interface Message {
   timestamp: Date;
   type?: string;
   liveComponent?: LiveComponent | null;
+  toolCalls?: ToolCallView[];
+}
+
+interface ToolCallView {
+  id: string;
+  name: string;
+  status: "running" | "done" | "error";
+  args?: unknown;
+  result?: unknown;
+  startedAt?: string;
+  endedAt?: string;
 }
 
 interface ClassroomResource {
@@ -50,6 +61,7 @@ interface ClassroomHistoryItem {
   content: string;
   created_at: string;
   live_component?: LiveComponent | null;
+  tool_calls?: ToolCallView[];
 }
 
 interface StageEvent {
@@ -65,6 +77,29 @@ interface StageMessage {
   eventType?: unknown;
   payload?: unknown;
   description?: unknown;
+}
+
+interface ClassroomStreamEvent {
+  content?: string;
+  replaceContent?: string;
+  liveComponent?: LiveComponent;
+  toolCall?: ToolCallView;
+  status?: string;
+  knowledgeSaved?: { points?: string[] };
+  memorySaved?: unknown;
+  errorSaved?: unknown;
+  stageSaved?: boolean;
+  resourceSaved?: unknown;
+  log?: DebugLog;
+  done?: boolean;
+  error?: string;
+}
+
+interface DebugLog {
+  ts: string;
+  level: "info" | "warn" | "error";
+  message: string;
+  details?: unknown;
 }
 
 const SUBJECTS = ["数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理", "通用"];
@@ -159,6 +194,131 @@ function stringifyPayload(payload: unknown): string {
   }
 }
 
+function stringifyToolPayload(payload: unknown): string {
+  if (payload === null || payload === undefined) return "";
+  if (typeof payload === "string") return payload;
+  if (typeof payload === "number" || typeof payload === "boolean") return String(payload);
+  try {
+    return JSON.stringify(payload, null, 2);
+  } catch {
+    return String(payload);
+  }
+}
+
+function upsertToolCall(calls: ToolCallView[] | undefined, nextCall: ToolCallView): ToolCallView[] {
+  const existing = calls ?? [];
+  const index = existing.findIndex((call) => call.id === nextCall.id);
+  if (index === -1) return [...existing, nextCall];
+  return existing.map((call, itemIndex) =>
+    itemIndex === index ? { ...call, ...nextCall } : call
+  );
+}
+
+function toolStatusLabel(status: ToolCallView["status"]): string {
+  if (status === "running") return "运行中";
+  if (status === "error") return "失败";
+  return "完成";
+}
+
+function toolStatusClass(status: ToolCallView["status"]): string {
+  if (status === "running") return "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-300";
+  if (status === "error") return "border-red-300 bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-300";
+  return "border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-300";
+}
+
+function logLevelClass(level: DebugLog["level"]): string {
+  if (level === "error") return "text-red-500";
+  if (level === "warn") return "text-amber-500";
+  return "text-emerald-500";
+}
+
+function formatLogTime(ts: string): string {
+  const date = new Date(ts);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString("zh-CN", { hour12: false });
+}
+
+function LogWindow({ logs }: { logs: DebugLog[] }) {
+  return (
+    <div className="flex h-full min-h-[8rem] flex-col overflow-hidden rounded-md border bg-neutral-950 text-neutral-100">
+      <div className="flex items-center gap-2 border-b border-neutral-800 px-3 py-2 text-xs">
+        <Terminal className="h-3.5 w-3.5 text-emerald-400" />
+        <span className="font-semibold">运行日志</span>
+        <span className="ml-auto text-[10px] text-neutral-400">{logs.length}</span>
+      </div>
+      <div className="flex-1 overflow-auto p-2 font-mono text-[11px] leading-relaxed">
+        {logs.length === 0 ? (
+          <div className="text-neutral-500">waiting for stream...</div>
+        ) : (
+          logs.map((log, index) => (
+            <details key={`${log.ts}-${index}`} className="group border-b border-neutral-900 py-1 last:border-0">
+              <summary className="cursor-pointer list-none">
+                <span className="text-neutral-500">{formatLogTime(log.ts)}</span>{" "}
+                <span className={logLevelClass(log.level)}>{log.level.toUpperCase()}</span>{" "}
+                <span>{log.message}</span>
+              </summary>
+              {log.details !== undefined && (
+                <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-neutral-900 p-2 text-neutral-300">
+                  {stringifyToolPayload(log.details)}
+                </pre>
+              )}
+            </details>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ToolCallTimeline({ calls }: { calls?: ToolCallView[] }) {
+  if (!calls || calls.length === 0) return null;
+
+  return (
+    <div className="not-prose mt-3 space-y-2 rounded-lg border bg-muted/30 p-2">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+        <Wrench className="h-3 w-3" />
+        工具调用
+      </div>
+      {calls.map((call) => {
+        const args = stringifyToolPayload(call.args);
+        const result = stringifyToolPayload(call.result);
+
+        return (
+          <div key={call.id} className={`rounded-md border px-2 py-1.5 text-[11px] ${toolStatusClass(call.status)}`}>
+            <div className="flex items-center gap-1.5">
+              {call.status === "running" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : call.status === "error" ? (
+                <XCircle className="h-3 w-3" />
+              ) : (
+                <CheckCircle2 className="h-3 w-3" />
+              )}
+              <span className="font-mono font-semibold">{call.name}</span>
+              <span className="ml-auto rounded-sm border bg-background/60 px-1.5 py-0.5">
+                {toolStatusLabel(call.status)}
+              </span>
+            </div>
+            {(args || result) && (
+              <details className="mt-1">
+                <summary className="cursor-pointer text-[10px] opacity-80">参数 / 结果</summary>
+                {args && (
+                  <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-background/70 p-2 font-mono text-[10px]">
+                    {args}
+                  </pre>
+                )}
+                {result && (
+                  <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-background/70 p-2 font-mono text-[10px]">
+                    {result}
+                  </pre>
+                )}
+              </details>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ClassroomPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -170,6 +330,8 @@ export default function ClassroomPage() {
   const [resourcesLoading, setResourcesLoading] = useState(false);
   const [stageEvents, setStageEvents] = useState<StageEvent[]>([]);
   const [statusHints, setStatusHints] = useState<string[]>([]);
+  const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
+  const [showLogs, setShowLogs] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stageEventsRef = useRef<StageEvent[]>([]);
 
@@ -212,6 +374,7 @@ export default function ClassroomPage() {
         timestamp: new Date(row.created_at),
         type: row.role === "student" ? "question" : "answer",
         liveComponent: row.live_component ?? null,
+        toolCalls: row.tool_calls ?? [],
       })));
 
       const latestSession = [...rows].reverse().find((row) => row.session_id)?.session_id ?? null;
@@ -233,6 +396,10 @@ export default function ClassroomPage() {
 
   const pushStatusHint = useCallback((hint: string) => {
     setStatusHints((prev) => [...prev, hint].slice(-6));
+  }, []);
+
+  const appendLog = useCallback((log: DebugLog) => {
+    setDebugLogs((prev) => [...prev, log].slice(-160));
   }, []);
 
   useEffect(() => {
@@ -302,6 +469,14 @@ export default function ClassroomPage() {
     setInputValue("");
     setIsStreaming(true);
     setStatusHints([]);
+    setDebugLogs([
+      {
+        ts: new Date().toISOString(),
+        level: "info",
+        message: "client request started",
+        details: { subject: selectedSubject, sessionId: activeSessionId, message: userMessage.content },
+      },
+    ]);
 
     const agentMessageId = (Date.now() + 1).toString();
     const agentMessage: Message = {
@@ -350,12 +525,30 @@ export default function ClassroomPage() {
         for (const line of lines) {
           if (line.trim().startsWith("data: ")) {
             try {
-              const data = JSON.parse(line.trim().slice(6));
+              const data = JSON.parse(line.trim().slice(6)) as ClassroomStreamEvent;
               if (typeof data.replaceContent === "string") {
                 fullContent = data.replaceContent;
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === agentMessageId ? { ...m, content: fullContent } : m
+                  )
+                );
+              }
+              if (data.log) {
+                appendLog(data.log);
+              }
+              if (data.toolCall) {
+                appendLog({
+                  ts: new Date().toISOString(),
+                  level: data.toolCall.status === "error" ? "error" : "info",
+                  message: `tool ${data.toolCall.status}: ${data.toolCall.name}`,
+                  details: data.toolCall,
+                });
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === agentMessageId
+                      ? { ...m, toolCalls: upsertToolCall(m.toolCalls, data.toolCall!) }
+                      : m
                   )
                 );
               }
@@ -367,15 +560,19 @@ export default function ClassroomPage() {
                 }
                 setMessages((prev) =>
                   prev.map((m) =>
-                    m.id === agentMessageId ? { ...m, content: fullContent, liveComponent: data.liveComponent || m.liveComponent } : m
+                    m.id === agentMessageId
+                      ? { ...m, content: fullContent, liveComponent: data.liveComponent || m.liveComponent }
+                      : m
                   )
                 );
               }
               if (data.done) {
+                appendLog({ ts: new Date().toISOString(), level: "info", message: "stream done" });
                 setIsStreaming(false);
                 void fetchClassroomResources();
               }
               if (typeof data.status === "string") {
+                appendLog({ ts: new Date().toISOString(), level: "info", message: data.status });
                 pushStatusHint(data.status);
               }
               if (data.knowledgeSaved?.points?.length) {
@@ -387,11 +584,15 @@ export default function ClassroomPage() {
               if (data.errorSaved) {
                 pushStatusHint("错题/误区已记录");
               }
+              if (data.stageSaved) {
+                pushStatusHint("黑板结果已记录");
+              }
               if (data.resourceSaved) {
                 pushStatusHint("知识点资料已保存");
                 void fetchClassroomResources();
               }
               if (data.error) {
+                appendLog({ ts: new Date().toISOString(), level: "error", message: data.error });
                 fullContent += `\n\n[错误: ${data.error}]`;
                 setMessages((prev) =>
                   prev.map((m) =>
@@ -408,6 +609,7 @@ export default function ClassroomPage() {
       }
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : "未知错误";
+      appendLog({ ts: new Date().toISOString(), level: "error", message: `client request failed: ${errMsg}` });
       setMessages((prev) =>
         prev.map((m) =>
           m.id === agentMessageId
@@ -448,6 +650,13 @@ export default function ClassroomPage() {
             <Sparkles className="h-3.5 w-3.5" />
             只存知识点
           </Badge>
+          <Button
+            size="sm"
+            variant={showLogs ? "secondary" : "outline"}
+            onClick={() => setShowLogs((value) => !value)}
+          >
+            <Terminal className="h-3.5 w-3.5 mr-1" />日志
+          </Button>
           <Button
             size="sm"
             variant={sessionId ? "outline" : "default"}
@@ -603,6 +812,11 @@ export default function ClassroomPage() {
               </div>
             )}
           </div>
+          {showLogs && (
+            <div className="border-t bg-background p-3">
+              <LogWindow logs={debugLogs} />
+            </div>
+          )}
         </ResizablePanel>
 
         <ResizableHandle withHandle />
@@ -673,6 +887,7 @@ export default function ClassroomPage() {
                                   <Sparkles className="h-3 w-3 mr-1" /> 已更新黑板演示
                                 </Badge>
                               )}
+                              <ToolCallTimeline calls={msg.toolCalls} />
                             </div>
                           )
                         ) : (
@@ -680,6 +895,9 @@ export default function ClassroomPage() {
                             {isPendingAgentMessage && <Loader2 className="h-3 w-3 animate-spin" />}
                             {isPendingAgentMessage ? "正在生成完整回答..." : "本轮没有可见文本，已保留黑板/记忆结果。"}
                           </span>
+                        )}
+                        {!visibleContent && msg.role === "agent" && (
+                          <ToolCallTimeline calls={msg.toolCalls} />
                         )}
                       </div>
                     </div>

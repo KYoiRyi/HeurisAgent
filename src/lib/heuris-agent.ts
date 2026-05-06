@@ -111,7 +111,7 @@ const SearchMemorySchema = Type.Object({
   limit: Type.Optional(Type.Number({ description: "Max results, default 8." })),
 });
 
-function buildHeurisTools(): AgentTool[] {
+export function buildHeurisTools(): AgentTool[] {
   const addMemoryTool: AgentTool<typeof AddMemorySchema> = {
     name: "add_memory",
     label: "Save Memory",
@@ -457,7 +457,14 @@ class HeurisAgentRuntime {
       // Build memory context
       const memCtx = memoryStore.buildContextFromQueries([prompt], 12);
       const systemPrompt =
-        "你是 HeurisAgent 后台任务执行智能体。请认真完成用户分配的任务，给出简洁且有用的结果。\n\n" +
+        [
+          "你是 HeurisAgent 后台任务执行智能体，运行在 pi-agent 内核上。",
+          "你不是被动聊天补全，而是有工具、有记忆、有任务循环的自主代理。",
+          "请先判断是否需要 search_memory、add_memory 或 schedule_cron_job；满足条件就主动调用工具。",
+          "工具调用可以并行执行；工具返回后继续综合结果，给出简洁且有用的最终结果。",
+          "不要把完整原始对话保存为记忆，只保存 durable facts、偏好、目标、任务结论或可复用知识。",
+        ].join("\n") +
+        "\n\n" +
         (memCtx ? memCtx + "\n\n" : "") +
         "当前时间：" +
         new Date().toLocaleString("zh-CN");

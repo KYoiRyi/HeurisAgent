@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActiveModel, getActiveApiKey } from "@/lib/model-config";
 import { Agent } from "@/lib/pi-agent/agent";
-import type { AgentEvent as PiAgentEvent } from "@/lib/pi-agent/types";
+import type { AgentEvent as PiAgentEvent, AgentMessage } from "@/lib/pi-agent/types";
 import { buildClassroomTools } from "@/lib/heuris-agent";
 import { loadSkills, formatSkillsForPrompt } from "@/lib/pi-agent/skills";
 import type { AssistantMessage } from "@/lib/pi-ai/index";
@@ -45,6 +45,24 @@ interface StageEventContext {
 
 interface ActiveStageContext {
   description?: string;
+}
+
+interface ToolCallSnapshot {
+  id: string;
+  name: string;
+  status: "running" | "done" | "error";
+  args?: unknown;
+  result?: unknown;
+  startedAt: string;
+  endedAt?: string;
+}
+
+interface ClassroomFallbackInput {
+  message: string;
+  subject: string;
+  memoryContext: string;
+  historyContext: string;
+  resourceContext: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -137,6 +155,9 @@ export async function POST(request: NextRequest) {
       "不要依赖旧版的手动学科/学生姓名选择器；请优先从当前对话、课堂资料、技能说明和记忆上下文中推断学习者画像、主题和薄弱点。若确实缺少关键信息，再自然追问。\n\n" +
       [
         "实时教学执行要求：",
+        "- 你运行在 pi-agent 循环中，可以连续思考、调用多个工具、读取工具结果、再继续生成最终回答。不要把工具当作可选装饰；把它们当作完成教学闭环的执行能力。",
+        "- 每轮都先自主判断：是否需要查记忆、是否需要互动黑板、是否出现错题/误区、是否有知识点要记录、是否要生成知识点资料。满足条件就主动调用工具，不要等学生要求。",
+        "- 可以并行调用互不依赖的工具，例如保存记忆、保存错题、保存知识点资料。工具返回后必须把结果融入下一段可见教学回答。",
         "- 主聊天必须先给学生一段完整、可读的回答；不要把思考草稿、工具状态或 JSON/代码块混进正文。",
         "- 需要互动实验、图像化推导、课堂练习、测验或可操作黑板时，必须调用 render_live_component 生成 HTML/CSS/JS 到互动黑板。",
         "- 黑板 JS 可以调用 window.HeurisStage.emit(type, payload) 上报学生操作、答案、分数、滑块值和实验结果；下一轮你会在 <stage-context> 中读取这些结果并调整教学。",
@@ -174,13 +195,47 @@ export async function POST(request: NextRequest) {
         let hiddenThinking = "";
         let liveComponent: Record<string, string> | null = null;
         let finalError: string | null = null;
+        let emptyFollowUpQueued = false;
+        const toolCalls = new Map<string, ToolCallSnapshot>();
 
         const sendEvent = (data: Record<string, unknown>) => {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
         };
+        const sendLog = (level: "info" | "warn" | "error", messageText: string, details?: unknown) => {
+          sendEvent({
+            log: {
+              ts: new Date().toISOString(),
+              level,
+              message: messageText,
+              details: safeToolPayload(details),
+            },
+          });
+        };
 
         try {
+          sendLog("info", "classroom request accepted", {
+            subject: recordSubject,
+            sessionId,
+            messageLength: message.length,
+            memoryContext: Boolean(memoryContext),
+            classroomHistoryContext: Boolean(classroomHistoryContext),
+            stageEventCount: stageEvents.length,
+            resourceCount: resources.length,
+          });
+
           agent.subscribe((event: PiAgentEvent) => {
+            if (event.type === "agent_start") {
+              sendLog("info", "pi-agent started", { model: model.name ?? model.provider });
+            } else if (event.type === "turn_start") {
+              sendLog("info", "agent turn started");
+            } else if (event.type === "turn_end") {
+              sendLog("info", "agent turn ended", {
+                toolResultCount: event.toolResults.length,
+              });
+            } else if (event.type === "agent_end") {
+              sendLog("info", "pi-agent ended", { messageCount: event.messages.length });
+            }
+
             if (event.type === "message_update") {
               const chunk = event.assistantMessageEvent;
               if (chunk.type === "thinking_delta") {
@@ -195,6 +250,17 @@ export async function POST(request: NextRequest) {
                 finalError = chunk.error.errorMessage ?? "LLM error";
               }
             } else if (event.type === "tool_execution_start") {
+              const toolCall = {
+                id: event.toolCallId,
+                name: event.toolName,
+                status: "running" as const,
+                args: safeToolPayload(event.args),
+                startedAt: new Date().toISOString(),
+              };
+              toolCalls.set(event.toolCallId, toolCall);
+              sendEvent({ toolCall: toolCallToEvent(toolCall) });
+              sendLog("info", `tool started: ${event.toolName}`, toolCallToEvent(toolCall));
+
               if (event.toolName === "render_live_component") {
                 liveComponent = event.args as Record<string, string>;
                 sendEvent({ status: `正在渲染互动黑板组件: ${liveComponent.description || "加载中..."}` });
@@ -207,7 +273,34 @@ export async function POST(request: NextRequest) {
               } else if (event.toolName === "save_error_question") {
                 sendEvent({ status: "智能体正在记录错题分析" });
               }
+            } else if (event.type === "tool_execution_update") {
+              const existing = toolCalls.get(event.toolCallId);
+              const toolCall = {
+                id: event.toolCallId,
+                name: event.toolName,
+                status: "running" as const,
+                args: safeToolPayload(event.args),
+                result: safeToolPayload(event.partialResult),
+                startedAt: existing?.startedAt ?? new Date().toISOString(),
+              };
+              toolCalls.set(event.toolCallId, toolCall);
+              sendEvent({ toolCall: toolCallToEvent(toolCall) });
+              sendLog("info", `tool update: ${event.toolName}`, toolCallToEvent(toolCall));
             } else if (event.type === "tool_execution_end") {
+              const existing = toolCalls.get(event.toolCallId);
+              const toolCall = {
+                id: event.toolCallId,
+                name: event.toolName,
+                status: event.isError ? "error" as const : "done" as const,
+                args: existing?.args,
+                result: safeToolPayload(event.result),
+                startedAt: existing?.startedAt ?? new Date().toISOString(),
+                endedAt: new Date().toISOString(),
+              };
+              toolCalls.set(event.toolCallId, toolCall);
+              sendEvent({ toolCall: toolCallToEvent(toolCall) });
+              sendLog(event.isError ? "error" : "info", `tool ended: ${event.toolName}`, toolCallToEvent(toolCall));
+
               if (event.isError) {
                 // Log tool error
                 console.error(`[Classroom] Tool ${event.toolName} error:`, event.result);
@@ -234,7 +327,21 @@ export async function POST(request: NextRequest) {
               }
             } else if (event.type === "message_end") {
               if (event.message.role === "assistant") {
-                finalAssistantText = assistantMessageToDisplayText(event.message as AssistantMessage);
+                const assistantMessage = event.message as AssistantMessage;
+                finalAssistantText = assistantMessageToDisplayText(assistantMessage);
+                const hasToolCall = assistantMessage.content.some((part) => part.type === "toolCall");
+                sendLog("info", "assistant message ended", {
+                  visibleTextLength: finalAssistantText.length,
+                  contentTypes: assistantMessage.content.map((part) => part.type),
+                });
+                if (!finalAssistantText.trim() && !hasToolCall && !emptyFollowUpQueued) {
+                  emptyFollowUpQueued = true;
+                  const followUp = buildEmptyAnswerFollowUp(message, recordSubject);
+                  agent.followUp(followUp);
+                  sendLog("warn", "assistant produced no visible text; queued pi-agent follow-up", {
+                    followUp: "empty-answer recovery follow-up",
+                  });
+                }
               }
             }
           });
@@ -244,6 +351,9 @@ export async function POST(request: NextRequest) {
 
           if (!finalAssistantText && hiddenThinking.trim()) {
             console.warn("[classroom] Model returned thinking without visible text; using classroom fallback if needed.");
+            sendLog("warn", "model returned thinking without visible text", {
+              hiddenThinkingLength: hiddenThinking.length,
+            });
           }
 
           // Final aggregated result (for backward compat)
@@ -255,9 +365,32 @@ export async function POST(request: NextRequest) {
           fullContent = reconciledContent;
 
           if (!finalError && !fullContent.trim()) {
-            const fallbackContent = "可以，我们继续学。你可以直接告诉我想接着哪个知识点，或者让我根据已有记忆继续推进。";
+            const fallbackTopic = inferFallbackTopic(
+              `${message}\n${memoryContext}\n${classroomHistoryContext}\n${resourceContext}`
+            );
+            const fallbackContent = buildClassroomFallback({
+              message,
+              subject: recordSubject,
+              memoryContext,
+              historyContext: classroomHistoryContext,
+              resourceContext,
+            });
             fullContent = fallbackContent;
             sendEvent({ content: fallbackContent });
+            sendLog("warn", "visible answer was empty, generated contextual fallback", {
+              fallbackLength: fallbackContent.length,
+            });
+            if (!liveComponent) {
+              const fallbackComponent = buildFallbackLiveComponent(fallbackTopic);
+              if (fallbackComponent) {
+                liveComponent = fallbackComponent;
+                sendEvent({ liveComponent: fallbackComponent });
+                sendLog("warn", "generated fallback Stage component", {
+                  topic: fallbackTopic,
+                  description: fallbackComponent.description,
+                });
+              }
+            }
           }
           const knowledgePoints = inferKnowledgePoints(`${message}\n${fullContent}\n${resourceContext}`);
 
@@ -269,6 +402,7 @@ export async function POST(request: NextRequest) {
             subject: recordSubject,
             knowledgePoints,
             liveComponent,
+            toolCalls: [...toolCalls.values()],
           });
 
           if (!finalError) {
@@ -284,6 +418,7 @@ export async function POST(request: NextRequest) {
             });
             if (artifactResult.knowledgeSaved) sendEvent({ knowledgeSaved: { points: knowledgePoints } });
             if (artifactResult.resourceSaved) sendEvent({ resourceSaved: { forced: true, knowledgePoints } });
+            if (artifactResult.stageSaved) sendEvent({ stageSaved: true });
           }
 
           if (client) {
@@ -304,6 +439,7 @@ export async function POST(request: NextRequest) {
         } catch (error) {
           const errMsg = error instanceof Error ? error.message : "未知错误";
           sendEvent({ error: errMsg });
+          sendLog("error", "classroom stream failed", { error: String(error) });
           
           if (client) {
              client.from("learning_records").insert({
@@ -505,6 +641,51 @@ function isSavedToolResult(details: unknown): details is { saved: true } {
   return isRecord(details) && details.saved === true;
 }
 
+function buildEmptyAnswerFollowUp(message: string, subject: string): AgentMessage {
+  return {
+    role: "user",
+    content: [
+      {
+        type: "text",
+        text: [
+          "上一轮没有产生可见教学正文。请作为课堂 agent 继续完成这一轮，不要停在空回复。",
+          `学科：${subject}`,
+          `学生原始问题：${message}`,
+          "要求：",
+          "1. 先给出完整、具体、可读的教学回答。",
+          "2. 如果主题适合互动，调用 render_live_component 生成黑板演示。",
+          "3. 如果有明确知识点，调用 add_memory 或 save_learning_resource 记录。",
+          "4. 不要只调用工具；工具后要继续总结给学生。",
+        ].join("\n"),
+      },
+    ],
+    timestamp: Date.now(),
+  };
+}
+
+function toolCallToEvent(toolCall: ToolCallSnapshot): Record<string, unknown> {
+  return {
+    id: toolCall.id,
+    name: toolCall.name,
+    status: toolCall.status,
+    args: toolCall.args,
+    result: toolCall.result,
+    startedAt: toolCall.startedAt,
+    endedAt: toolCall.endedAt,
+  };
+}
+
+function safeToolPayload(value: unknown): unknown {
+  if (value === undefined || value === null) return value ?? null;
+  if (typeof value === "string") return compactText(value, 2500);
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  try {
+    return JSON.parse(compactText(JSON.stringify(value), 4000)) as unknown;
+  } catch {
+    return compactText(String(value), 2500);
+  }
+}
+
 function inferKnowledgePoints(text: string): string[] {
   const points = new Set<string>();
   const commonPhysicsPoints = [
@@ -530,6 +711,153 @@ function inferKnowledgePoints(text: string): string[] {
   return [...points].slice(0, 8);
 }
 
+function buildClassroomFallback(input: ClassroomFallbackInput): string {
+  const topic = inferFallbackTopic(
+    `${input.message}\n${input.memoryContext}\n${input.historyContext}\n${input.resourceContext}`
+  );
+
+  if (topic === "电磁感应") {
+    return [
+      "我们就从**电磁感应**的核心概念开始。",
+      "",
+      "**一句话理解**：当穿过闭合回路的磁通量发生变化时，回路中会产生感应电动势；如果回路是闭合的，就会出现感应电流。",
+      "",
+      "可以把它想成：磁场不是只“存在”在那里，它的变化会推动电荷运动。比如导体棒在磁场中切割磁感线时，导体里的自由电子受到磁场力作用，电荷被分开，于是两端出现电势差；接成闭合回路后就形成电流。",
+      "",
+      "接下来最重要的三件事是：",
+      "1. **磁通量**：描述“穿过回路的磁场有多少”。",
+      "2. **法拉第电磁感应定律**：磁通量变化越快，感应电动势越大。",
+      "3. **楞次定律**：感应电流的方向总是阻碍引起它的磁通量变化。",
+      "",
+      "我们下一步可以先用一个互动黑板演示“导体棒切割磁感线”，再看公式 `E = B L v` 是怎么来的。",
+    ].join("\n");
+  }
+
+  if (topic) {
+    return [
+      `我们先抓住 **${topic}** 的核心概念。`,
+      "",
+      `学习一个知识点时，先不要急着背定义，可以按这三个问题来理解：`,
+      "1. 它描述的现象是什么？",
+      "2. 哪些量会影响它？",
+      "3. 遇到题目时用什么判断方法或公式？",
+      "",
+      `你现在可以先告诉我：你想从 ${topic} 的“概念理解”“公式推导”“例题应用”还是“互动演示”开始？如果你不选，我会默认从概念和一个简单例子讲起。`,
+    ].join("\n");
+  }
+
+  if (input.subject === "物理") {
+    return [
+      "可以，我们继续学物理。",
+      "",
+      "如果你暂时没指定知识点，我建议按“现象 -> 概念 -> 公式 -> 例题 -> 黑板互动”的顺序学。比如你想学电磁感应，我们会先回答一个核心问题：**磁场变化为什么能产生电流？**",
+      "",
+      "你可以直接说具体主题，例如“电磁感应”“楞次定律”“磁通量”，我会接着讲并生成互动黑板。",
+    ].join("\n");
+  }
+
+  return [
+    `可以，我们继续学${input.subject === "通用" ? "" : input.subject}。`,
+    "",
+    "我这轮没有拿到模型的可见正文，所以先给你一个可继续的学习入口：请说出你想学的知识点，或者选择“概念 / 公式 / 例题 / 互动演示”中的一个方向，我会接着推进。",
+  ].join("\n");
+}
+
+function inferFallbackTopic(text: string): string | null {
+  const knownTopics = [
+    "电磁感应",
+    "楞次定律",
+    "法拉第电磁感应定律",
+    "磁通量",
+    "右手定则",
+    "感应电流",
+    "感应电动势",
+    "自感",
+    "互感",
+  ];
+
+  for (const topic of knownTopics) {
+    if (text.includes(topic)) return topic;
+  }
+
+  const match = text.match(/(?:学习|讲|解释|继续学|核心概念|知识点)[：:，,\s]*([\u4e00-\u9fa5A-Za-z0-9·+\-]{2,18})/);
+  const candidate = match?.[1]?.trim();
+  if (!candidate || candidate.startsWith("这个") || candidate.includes("知识点")) return null;
+  return candidate;
+}
+
+function buildFallbackLiveComponent(topic: string | null): Record<string, string> | null {
+  if (topic !== "电磁感应") return null;
+
+  return {
+    description: "电磁感应：导体棒切割磁感线互动演示",
+    html: [
+      '<main class="emi-lab">',
+      '  <section class="scene" aria-label="电磁感应互动演示">',
+      '    <div class="field-lines">',
+      '      <span></span><span></span><span></span><span></span><span></span>',
+      "    </div>",
+      '    <div class="rail rail-top"></div>',
+      '    <div class="rail rail-bottom"></div>',
+      '    <div id="rod" class="rod"></div>',
+      '    <div class="meter">',
+      '      <div class="meter-label">感应电动势</div>',
+      '      <div id="emf">E = 0.60 V</div>',
+      "    </div>",
+      "  </section>",
+      '  <section class="controls">',
+      '    <label>速度 v: <strong id="speedText">0.60 m/s</strong></label>',
+      '    <input id="speed" type="range" min="0" max="1.5" step="0.1" value="0.6" />',
+      '    <label>磁场 B: <strong id="fieldText">0.50 T</strong></label>',
+      '    <input id="field" type="range" min="0.1" max="1.2" step="0.1" value="0.5" />',
+      '    <button id="check">记录观察</button>',
+      "  </section>",
+      '  <p class="hint">拖动速度和磁场，观察 E = B L v。这里取导体棒长度 L = 2 m。</p>',
+      "</main>",
+    ].join("\n"),
+    css: [
+      ".emi-lab { display:grid; gap:16px; color:#0f172a; }",
+      ".scene { position:relative; min-height:260px; border:1px solid #cbd5e1; border-radius:8px; overflow:hidden; background:#f8fafc; }",
+      ".field-lines { position:absolute; inset:0; display:grid; grid-template-columns:repeat(5,1fr); align-items:center; opacity:.72; }",
+      ".field-lines span { justify-self:center; width:34px; height:34px; border-radius:50%; border:2px solid #38bdf8; position:relative; }",
+      ".field-lines span:after { content:'x'; position:absolute; inset:0; display:grid; place-items:center; color:#0284c7; font-weight:700; }",
+      ".rail { position:absolute; left:46px; right:46px; height:6px; border-radius:999px; background:#334155; }",
+      ".rail-top { top:82px; } .rail-bottom { bottom:82px; }",
+      ".rod { position:absolute; top:64px; bottom:64px; left:42%; width:14px; border-radius:999px; background:#f97316; box-shadow:0 0 0 4px rgba(249,115,22,.18); transition:left .25s ease; }",
+      ".meter { position:absolute; right:16px; top:16px; border:1px solid #cbd5e1; border-radius:8px; padding:10px 12px; background:white; min-width:120px; }",
+      ".meter-label { font-size:12px; color:#64748b; } #emf { font-size:20px; font-weight:700; color:#059669; }",
+      ".controls { display:grid; gap:8px; } label { font-size:13px; } input { width:100%; }",
+      "button { width:max-content; border:1px solid #10b981; background:#10b981; color:white; border-radius:6px; padding:8px 12px; cursor:pointer; }",
+      ".hint { margin:0; font-size:12px; color:#64748b; }",
+    ].join("\n"),
+    js: [
+      "const L = 2;",
+      "const speed = document.getElementById('speed');",
+      "const field = document.getElementById('field');",
+      "const speedText = document.getElementById('speedText');",
+      "const fieldText = document.getElementById('fieldText');",
+      "const emf = document.getElementById('emf');",
+      "const rod = document.getElementById('rod');",
+      "function update(source) {",
+      "  const v = Number(speed.value);",
+      "  const B = Number(field.value);",
+      "  const E = B * L * v;",
+      "  speedText.textContent = v.toFixed(2) + ' m/s';",
+      "  fieldText.textContent = B.toFixed(2) + ' T';",
+      "  emf.textContent = 'E = ' + E.toFixed(2) + ' V';",
+      "  rod.style.left = (18 + Math.min(64, v * 42)) + '%';",
+      "  if (window.HeurisStage) window.HeurisStage.emit('experiment-result', {",
+      "    knowledgePoint: '电磁感应', source, B, L, v, emf: Number(E.toFixed(2)), formula: 'E = B L v'",
+      "  });",
+      "}",
+      "speed.addEventListener('input', () => update('speed'));",
+      "field.addEventListener('input', () => update('magnetic-field'));",
+      "document.getElementById('check').addEventListener('click', () => update('student-observation'));",
+      "update('ready');",
+    ].join("\n"),
+  };
+}
+
 interface PersistArtifactResult {
   knowledgeSaved: boolean;
   resourceSaved: boolean;
@@ -543,6 +871,7 @@ function persistClassroomHistory(input: {
   subject: string;
   knowledgePoints: string[];
   liveComponent: Record<string, string> | null;
+  toolCalls: ToolCallSnapshot[];
 }) {
   classroomHistoryStore.add({
     sessionId: input.sessionId,
@@ -562,6 +891,7 @@ function persistClassroomHistory(input: {
       messageType: "answer",
       knowledgePoints: input.knowledgePoints,
       liveComponent: input.liveComponent,
+      toolCalls: input.toolCalls.map(toolCallToEvent),
     });
   }
 }
