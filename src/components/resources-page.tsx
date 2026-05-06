@@ -124,21 +124,21 @@ export default function ResourcesPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col items-center text-center gap-4 py-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <FolderOpen className="h-6 w-6 text-cyan-500" />
+          <h1 className="text-3xl font-semibold tracking-tight flex items-center justify-center gap-3">
+            <FolderOpen className="h-8 w-8 text-cyan-500" />
             教学资源库
           </h1>
-          <p className="text-muted-foreground mt-1">多智能体共享知识基础 · 资源导入与共享</p>
+          <p className="text-muted-foreground mt-2 text-base">多智能体共享知识基础 · 资源导入与共享</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={fetchResources}>
-            <RefreshCw className="h-3.5 w-3.5 mr-1" />刷新
+          <Button variant="outline" onClick={fetchResources}>
+            <RefreshCw className="h-4 w-4 mr-1" />刷新
           </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button size="sm"><Plus className="h-3.5 w-3.5 mr-1" />导入资源</Button>
+              <Button><Plus className="h-4 w-4 mr-1" />导入资源</Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
@@ -260,7 +260,7 @@ export default function ResourcesPage() {
           {filteredResources.map((resource) => {
             const catInfo = getCategoryInfo(resource.category);
             return (
-              <Card key={resource.id} className="hover:shadow-md transition-shadow">
+              <Card key={resource.id} className="hover:bg-muted/10 transition-colors">
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3">
                     <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${

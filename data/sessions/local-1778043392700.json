@@ -1,0 +1,82 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "我们能继续学吗物理吗"
+      }
+    ],
+    "timestamp": 1778043392928
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "<think>\n学生张三想继续学习物理。根据记忆上下文，他正在学习高中物理电磁感应章节，已经学习了：\n- 导体切割磁感线产生感应电流的基础概念\n- 法拉第电磁感应定律（ε=B×L×v）\n- 右手定则判断电流方向\n- 磁通量的概念\n\n他目前处于入门阶段，还需要学习楞次定律、自感互感等内容。\n\n我应该继续推进电磁感应的学习，可以从楞次定律开始，这是下一个逻辑知识点。楞"
+      }
+    ],
+    "api": "openai-completions",
+    "provider": "custom",
+    "model": "MiniMax-M2.5-highspeed",
+    "usage": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0,
+      "totalTokens": 0,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      }
+    },
+    "stopReason": "error",
+    "timestamp": 1778043392963,
+    "responseId": "0649fd077afa416ca7691cf5b79dd688",
+    "errorMessage": "output new_sensitive (1027)"
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "我们能继续学吗物理吗"
+      }
+    ],
+    "timestamp": 1778043414693
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "<think>\n学生张三想继续学习物理。根据记忆上下文，他正在学习高中物理电磁感应章节，已经学习了导体切割磁感线产生感应电流的基础概念、法拉第电磁感应定律、右手定则判断电流方向、磁通量的概念。他目前处于入门阶段，还需要学习楞次定律、自感互感等内容。\n\n我应该继续推进电磁感应的学习，可以从楞次定律开始，这是下一个逻辑知识点。我会通过互动引导"
+      }
+    ],
+    "api": "openai-completions",
+    "provider": "custom",
+    "model": "MiniMax-M2.5-highspeed",
+    "usage": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0,
+      "totalTokens": 0,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      }
+    },
+    "stopReason": "error",
+    "timestamp": 1778043414693,
+    "responseId": "0649fd19a6a63ffc6331d8b536c41fd7",
+    "errorMessage": "output new_sensitive (1027)"
+  }
+]

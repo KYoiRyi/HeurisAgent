@@ -64,7 +64,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Logo */}
         <div className="flex h-16 items-center justify-between border-b px-4">
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
               <GraduationCap className="h-5 w-5 text-primary-foreground" />
             </div>
             {sidebarOpen && (
@@ -94,7 +94,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
+                  "flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-all",
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -119,8 +119,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* LLM Status */}
         {sidebarOpen && (
-          <div className="absolute bottom-0 left-0 right-0 border-t p-4">
-            <Link href="/settings" className="block rounded-lg bg-gradient-to-br from-primary/5 to-primary/10 p-3 hover:from-primary/10 hover:to-primary/15 transition-colors">
+          <div className="absolute bottom-0 left-0 right-0 border-t p-4 bg-background">
+            <Link href="/settings" className="block rounded-xl bg-muted/50 p-3 hover:bg-muted transition-colors">
               <div className="flex items-center gap-2 mb-1.5">
                 <Bot className="h-4 w-4 text-primary" />
                 <span className="text-xs font-semibold">AI 提供商</span>

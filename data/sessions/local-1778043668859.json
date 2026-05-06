@@ -1,0 +1,82 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "我们能继续学习物理吗"
+      }
+    ],
+    "timestamp": 1778043669007
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "<think>\n学生张三想继续学习物理。根据记忆上下文，他正在学习高中物理电磁感应章节，已经学习了导体切割磁感线产生感应电流的基础概念、法拉第电磁感应定律、右手定则判断电流方向、磁通量的概念。他目前处于入门阶段"
+      }
+    ],
+    "api": "openai-completions",
+    "provider": "custom",
+    "model": "MiniMax-M2.5-highspeed",
+    "usage": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0,
+      "totalTokens": 0,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      }
+    },
+    "stopReason": "error",
+    "timestamp": 1778043669036,
+    "responseId": "0649fe1e79dcca88247efe3f944ab288",
+    "errorMessage": "output new_sensitive (1027)"
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "我们能继续学习物理吗"
+      }
+    ],
+    "timestamp": 1778043696071
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "<think>\n用户想继续学习物理。根据记忆上下文，学生张三正在学习高中物理电磁感应章节，已经学习了：\n- 导体切割磁感线产生感应电流的基础概念\n- 法拉第电磁感应定律（ε=B×L×v）\n- 右手"
+      }
+    ],
+    "api": "openai-completions",
+    "provider": "custom",
+    "model": "MiniMax-M2.5-highspeed",
+    "usage": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0,
+      "totalTokens": 0,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      }
+    },
+    "stopReason": "error",
+    "timestamp": 1778043696072,
+    "responseId": "0649fe3419cc85926076fa01ad892e50",
+    "errorMessage": "output new_sensitive (1027)"
+  }
+]

@@ -129,10 +129,10 @@ export default function MemoryPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-center text-center gap-4 py-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Brain className="h-6 w-6 text-primary" />
+          <h1 className="text-3xl font-semibold tracking-tight flex items-center justify-center gap-3">
+            <Brain className="h-8 w-8 text-primary" />
             记忆中心
           </h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -140,12 +140,12 @@ export default function MemoryPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1.5">
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          <Button variant="outline" onClick={load} disabled={loading} className="gap-1.5">
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             刷新
           </Button>
-          <Button size="sm" onClick={() => setShowAdd(!showAdd)} className="gap-1.5">
-            <Plus className="h-3.5 w-3.5" />
+          <Button onClick={() => setShowAdd(!showAdd)} className="gap-1.5">
+            <Plus className="h-4 w-4" />
             添加记忆
           </Button>
         </div>
@@ -266,7 +266,7 @@ function MemoryCard({ memory: m, onDelete, onPin }: {
   const src = SOURCE_META[m.source] ?? SOURCE_META.manual;
 
   return (
-    <Card className={`group transition-all hover:shadow-sm ${m.pinned ? "border-primary/30 bg-primary/5" : ""}`}>
+    <Card className={`group transition-all ${m.pinned ? "border-primary/30 bg-primary/5" : ""}`}>
       <CardContent className="p-4">
         <div className="flex gap-3">
           <div className="flex-1 min-w-0">

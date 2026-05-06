@@ -114,7 +114,7 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <Card className="shadow-sm border-muted">
+      <Card className="shadow-none border-border">
         <CardHeader className="bg-muted/30 pb-4 border-b">
           <CardTitle className="text-lg flex items-center gap-2">
             <Globe className="h-5 w-5 text-primary" />
@@ -243,7 +243,7 @@ export default function SettingsPage() {
                     key={m}
                     onClick={() => setModel(m)}
                     className={`
-                      text-xs font-mono px-3 py-1.5 rounded border transition-colors shadow-sm
+                      text-xs font-mono px-3 py-1.5 rounded-full border transition-colors
                       ${model === m
                         ? "bg-primary text-primary-foreground border-primary"
                         : "bg-background hover:border-primary/50"

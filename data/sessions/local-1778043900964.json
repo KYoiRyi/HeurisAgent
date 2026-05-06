@@ -1,0 +1,42 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "继续讲物理"
+      }
+    ],
+    "timestamp": 1778043901251
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "<think>\n学生张三想继续学习物理。根据记忆上下文，他正在学习高中物理电磁感应章节，已经学习了导体切割磁感线产生感应电流的基础概念、法拉第电磁感应定律、右手定则判断电流方向、磁通量的概念。他目前处于入门阶段，还需要学习楞次定律、自感互感等内容。\n\n我应该继续推进电磁感应的学习，可以从楞次定律开始，这是下一个逻辑知识点。楞次定律是判断感应电流方向的重要定律，比右手定则更具有普遍性。\n\n我会：\n1. 回顾一下已学知识，建立联系"
+      }
+    ],
+    "api": "openai-completions",
+    "provider": "custom",
+    "model": "MiniMax-M2.5-highspeed",
+    "usage": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0,
+      "totalTokens": 0,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      }
+    },
+    "stopReason": "error",
+    "timestamp": 1778043901278,
+    "responseId": "0649ff0049d485f2f20081d867b40bee",
+    "errorMessage": "output new_sensitive (1027)"
+  }
+]

@@ -149,13 +149,13 @@ export default function ErrorsPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col items-center text-center gap-4 py-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <BookX className="h-6 w-6 text-orange-500" />
+          <h1 className="text-3xl font-semibold tracking-tight flex items-center justify-center gap-3">
+            <BookX className="h-8 w-8 text-orange-500" />
             错题管理智能体
           </h1>
-          <p className="text-muted-foreground mt-1">错题收集 · 分类分析 · 针对性强化建议</p>
+          <p className="text-muted-foreground mt-2 text-base">错题收集 · 分类分析 · 针对性强化建议</p>
         </div>
         <div className="flex items-center gap-2">
           <Input
@@ -164,13 +164,13 @@ export default function ErrorsPage() {
             onChange={(e) => setStudentName(e.target.value)}
             className="w-28"
           />
-          <Button size="sm" variant="outline" onClick={fetchErrors}>
-            <RefreshCw className="h-3.5 w-3.5 mr-1" />刷新
+          <Button variant="outline" onClick={fetchErrors}>
+            <RefreshCw className="h-4 w-4 mr-1" />刷新
           </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="h-3.5 w-3.5 mr-1" />添加错题
+              <Button>
+                <Plus className="h-4 w-4 mr-1" />添加错题
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
@@ -274,7 +274,7 @@ export default function ErrorsPage() {
           </Card>
         ) : (
           errors.map((error) => (
-            <Card key={error.id} className="overflow-hidden">
+            <Card key={error.id} className="overflow-hidden shadow-none border-border">
               <CardContent className="p-4">
                 <div className="flex flex-col sm:flex-row sm:items-start gap-4">
                   <div className="flex-1 space-y-3">

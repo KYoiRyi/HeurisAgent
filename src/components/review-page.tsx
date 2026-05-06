@@ -86,13 +86,13 @@ export default function ReviewPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col items-center text-center gap-4 py-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <CalendarClock className="h-6 w-6 text-purple-500" />
+          <h1 className="text-3xl font-semibold tracking-tight flex items-center justify-center gap-3">
+            <CalendarClock className="h-8 w-8 text-purple-500" />
             复习策略智能体
           </h1>
-          <p className="text-muted-foreground mt-1">个性化复习计划 · 知识盲点提示 · 艾宾浩斯遗忘曲线</p>
+          <p className="text-muted-foreground mt-2 text-base">个性化复习计划 · 知识盲点提示 · 艾宾浩斯遗忘曲线</p>
         </div>
         <div className="flex items-center gap-2">
           <Input
@@ -125,7 +125,7 @@ export default function ReviewPage() {
       ) : !activePlan ? (
         <Card>
           <CardContent className="p-12 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500/10 to-purple-500/20 mx-auto mb-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-purple-500/10 mx-auto mb-4">
               <Brain className="h-8 w-8 text-purple-500" />
             </div>
             <h3 className="text-lg font-semibold">尚未生成复习计划</h3>

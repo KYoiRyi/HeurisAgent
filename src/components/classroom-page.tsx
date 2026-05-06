@@ -218,13 +218,13 @@ export default function ClassroomPage() {
   return (
     <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0 mb-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <MessageSquareText className="h-6 w-6 text-emerald-500" />
+          <h1 className="text-3xl font-semibold tracking-tight flex items-center gap-3">
+            <MessageSquareText className="h-8 w-8 text-emerald-500" />
             课堂互动智能体 (Live)
           </h1>
-          <p className="text-muted-foreground mt-1 text-sm">沉浸式双屏布局 · 资料与记忆自动联动</p>
+          <p className="text-muted-foreground mt-2 text-base">沉浸式双屏布局 · 资料与记忆自动联动</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="h-8 gap-1.5 px-3">
@@ -294,8 +294,8 @@ export default function ClassroomPage() {
           </div>
           <div className="flex-1 relative overflow-hidden flex items-center justify-center p-4 bg-dot-pattern">
             {activeComponent ? (
-              <div className="w-full h-full rounded-xl overflow-hidden border shadow-sm flex flex-col bg-white">
-                <div className="px-3 py-1.5 bg-muted/50 border-b text-xs text-muted-foreground flex items-center">
+              <div className="w-full h-full rounded-xl overflow-hidden border flex flex-col bg-white">
+                <div className="px-4 py-2 bg-muted border-b text-xs text-muted-foreground flex items-center">
                   <Lightbulb className="h-3 w-3 mr-1" />
                   {activeComponent.description}
                 </div>
@@ -322,8 +322,8 @@ export default function ClassroomPage() {
                 />
               </div>
             ) : selectedResource ? (
-              <div className="h-full w-full overflow-hidden rounded-lg border bg-background shadow-sm flex flex-col">
-                <div className="border-b bg-muted/40 px-4 py-3 shrink-0">
+              <div className="h-full w-full overflow-hidden rounded-xl border bg-background flex flex-col">
+                <div className="border-b bg-muted px-4 py-3 shrink-0">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-cyan-500" />
                     <h2 className="text-sm font-semibold truncate">{selectedResource.title}</h2>
@@ -378,7 +378,7 @@ export default function ClassroomPage() {
           <div className="flex-1 overflow-y-auto p-4 flex flex-col">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-20">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/20 mb-4">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 mb-4">
                   <Bot className="h-8 w-8 text-emerald-500" />
                 </div>
                 <h3 className="text-lg font-semibold">课堂互动智能体</h3>
@@ -410,14 +410,14 @@ export default function ClassroomPage() {
                     <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-1 ${
                       msg.role === "student"
                         ? "bg-primary text-primary-foreground"
-                        : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white"
+                        : "bg-emerald-500 text-white"
                     }`}>
                       {msg.role === "student" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                     </div>
-                    <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
+                    <div className={`max-w-[85%] rounded-2xl px-5 py-3 text-[15px] leading-relaxed ${
                       msg.role === "student"
                         ? "bg-primary text-primary-foreground"
-                        : "bg-background border shadow-sm prose prose-sm dark:prose-invert break-words"
+                        : "bg-background border prose prose-sm dark:prose-invert break-words"
                     }`}>
                       {msg.content ? (
                         msg.role === "student" ? (

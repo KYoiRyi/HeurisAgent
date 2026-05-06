@@ -142,23 +142,23 @@ export default function DashboardPage() {
         </div>
       )}
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col items-center text-center gap-4 py-8">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-primary" />
+          <h1 className="text-4xl font-semibold tracking-tight flex items-center justify-center gap-3">
+            <Sparkles className="h-8 w-8 text-primary" />
             学习仪表盘
           </h1>
-          <p className="text-muted-foreground mt-1">多智能体协作 · 启发式学习 · 实时数据洞察</p>
+          <p className="text-muted-foreground mt-3 text-lg">多智能体协作 · 启发式学习 · 实时数据洞察</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full max-w-sm">
           <Input
             placeholder="输入你的姓名"
             value={inputName}
             onChange={(e) => setInputName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleQuery()}
-            className="w-40"
+            className="flex-1 text-center bg-muted/30"
           />
-          <Button size="sm" onClick={handleQuery}>查询</Button>
+          <Button onClick={handleQuery}>查询</Button>
         </div>
       </div>
 
