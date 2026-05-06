@@ -101,18 +101,20 @@ export default function ClassroomPage() {
 
       if (!reader) throw new Error("无法读取响应流");
 
+      let buffer = "";
       let fullContent = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const text = decoder.decode(value, { stream: true });
-        const lines = text.split("\n");
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
+          if (line.trim().startsWith("data: ")) {
             try {
-              const data = JSON.parse(line.slice(6));
+              const data = JSON.parse(line.trim().slice(6));
               if (data.content !== undefined || data.liveComponent !== undefined) {
                 if (data.content) fullContent += data.content;
                 setMessages((prev) =>

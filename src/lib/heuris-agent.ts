@@ -164,6 +164,49 @@ function buildHeurisTools(): AgentTool[] {
   return [addMemoryTool, scheduleCronJobTool, searchMemoryTool];
 }
 
+const RenderLiveComponentSchema = Type.Object({
+  html: Type.String({ description: "The HTML structure of the interactive component" }),
+  css: Type.Optional(Type.String({ description: "Any custom CSS styles (vanilla CSS)" })),
+  js: Type.Optional(Type.String({ description: "Vanilla JavaScript to make the component interactive" })),
+  description: Type.String({ description: "A brief description of what this component is" }),
+});
+
+export function buildClassroomTools(): AgentTool[] {
+  const renderLiveComponent: AgentTool<typeof RenderLiveComponentSchema> = {
+    name: "render_live_component",
+    label: "Render Live Component",
+    description: "Generate a live interactive UI component (HTML/JS) to render on the Stage. Use this to show simulations, interactive widgets, or dynamic web elements to the student.",
+    parameters: RenderLiveComponentSchema,
+    execute: async (_id, params: Static<typeof RenderLiveComponentSchema>) => {
+      // The actual rendering happens on the frontend via the SSE event stream parsing the tool call.
+      // This execute function just acknowledges to the Agent that the component was successfully sent to the student.
+      console.log(`[Classroom] Rendered component: ${params.description}`);
+      return {
+        content: [{ type: "text", text: "Component has been rendered successfully on the student's interactive stage." }],
+        details: params,
+      };
+    },
+  };
+  
+  // The classroom agent can also search memory if needed.
+  // We extract searchMemoryTool from buildHeurisTools so we can reuse it.
+  const searchMemoryTool: AgentTool<typeof SearchMemorySchema> = {
+    name: "search_memory",
+    label: "Search Memory",
+    description: "Search long-term memory for relevant context.",
+    parameters: SearchMemorySchema,
+    execute: async (_id, params: Static<typeof SearchMemorySchema>) => {
+      const ctx = memoryStore.buildContext(params.query, params.limit ?? 8);
+      return {
+        content: [{ type: "text", text: ctx || "No relevant memories found." }],
+        details: { query: params.query, found: !!ctx },
+      };
+    },
+  };
+
+  return [renderLiveComponent, searchMemoryTool];
+}
+
 // ── HeurisAgentRuntime ────────────────────────────────────────────────────────
 
 class HeurisAgentRuntime {

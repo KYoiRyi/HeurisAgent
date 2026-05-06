@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActiveModel, getActiveApiKey } from "@/lib/model-config";
-import { streamSimple } from "@/lib/pi-ai/stream";
-import type { Context, UserMessage, AssistantMessage as PiAssistantMessage } from "@/lib/pi-ai/index";
+import { Agent } from "@/lib/pi-agent/agent";
+import type { AgentEvent as PiAgentEvent } from "@/lib/pi-agent/types";
+import { buildClassroomTools } from "@/lib/heuris-agent";
+import type { UserMessage, AssistantMessage as PiAssistantMessage } from "@/lib/pi-ai/index";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
 
 const CLASSROOM_SYSTEM_PROMPT = `你是一个专业的课堂互动智能体，擅长实时提问解答和知识点联动讲解。
@@ -101,36 +103,22 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    piMessages.push({ role: "user", content: message, timestamp: Date.now() });
-
-    const context: Context = {
-      systemPrompt,
-      messages: piMessages,
-      tools: [
-        {
-          name: "render_live_component",
-          description:
-            "Generate a live interactive UI component (HTML/JS) to render on the Stage. Use this to show simulations, interactive widgets, or dynamic web elements to the student.",
-          parameters: {
-            type: "object",
-            properties: {
-              html: { type: "string", description: "The HTML structure of the interactive component" },
-              css: { type: "string", description: "Any custom CSS styles (vanilla CSS)" },
-              js: {
-                type: "string",
-                description:
-                  "Vanilla JavaScript to make the component interactive. Do not use window.onload or DOMContentLoaded, just write the script.",
-              },
-              description: { type: "string", description: "A brief description of what this component is" },
-            },
-            required: ["html", "description"],
-          },
-        },
-      ],
-    };
+    // We do NOT push the current message to piMessages here because we will use agent.prompt(message) below.
 
     const model = getActiveModel();
     const apiKey = getActiveApiKey();
+    
+    // Initialize the Agent
+    const agent = new Agent({
+      initialState: {
+        systemPrompt,
+        messages: piMessages,
+        model,
+        tools: buildClassroomTools(),
+      },
+      getApiKey: () => apiKey,
+      toolExecution: "parallel",
+    });
 
     // SSE stream
     const encoder = new TextEncoder();
@@ -138,54 +126,94 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         let fullContent = "";
         let liveComponent: Record<string, string> | null = null;
+        let finalError: string | null = null;
+        let isThinking = false;
 
         const sendEvent = (data: Record<string, unknown>) => {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
         };
 
         try {
-          const eventStream = streamSimple(model, context, { apiKey, temperature: 0.7 });
-
-          for await (const event of eventStream) {
-            switch (event.type) {
-              case "thinking_delta":
-                // Send thinking chunks to client
-                sendEvent({ type: "thinking_delta", delta: event.delta });
-                break;
-
-              case "text_delta":
-                fullContent += event.delta;
-                sendEvent({ type: "text_delta", delta: event.delta });
-                break;
-
-              case "toolcall_end":
-                if (event.toolCall.name === "render_live_component") {
-                  liveComponent = event.toolCall.arguments as Record<string, string>;
-                  sendEvent({ type: "tool_call", toolName: "render_live_component", args: liveComponent });
+          agent.subscribe((event: PiAgentEvent) => {
+            if (event.type === "message_update") {
+              const chunk = event.assistantMessageEvent;
+              if (chunk.type === "thinking_delta") {
+                if (!isThinking) {
+                  sendEvent({ content: "<think>\n" });
+                  isThinking = true;
                 }
-                break;
-
-              case "error":
-                sendEvent({ error: event.error.errorMessage ?? "LLM error" });
-                break;
+                sendEvent({ content: chunk.delta });
+              } else if (chunk.type === "text_delta") {
+                if (isThinking) {
+                  sendEvent({ content: "\n</think>\n" });
+                  isThinking = false;
+                }
+                fullContent += chunk.delta;
+                sendEvent({ content: chunk.delta });
+              } else if (chunk.type === "error") {
+                sendEvent({ error: chunk.error.errorMessage ?? "LLM error" });
+                finalError = chunk.error.errorMessage ?? "LLM error";
+              }
+            } else if (event.type === "tool_execution_start") {
+              if (event.toolName === "render_live_component") {
+                liveComponent = event.args as Record<string, string>;
+                sendEvent({ type: "tool_call", toolName: "render_live_component", args: liveComponent });
+              }
+            } else if (event.type === "tool_execution_end") {
+              if (event.isError) {
+                // Log tool error
+                console.error(`[Classroom] Tool ${event.toolName} error:`, event.result);
+                finalError = `Tool ${event.toolName} failed.`;
+                // Add to agent tasks or errors table in background
+                if (client) {
+                  void client.from("learning_records").insert({
+                    student_name: studentName || "匿名学生",
+                    subject: subject || "通用",
+                    record_type: "error",
+                    agent_type: "classroom_agent",
+                    description: `工具执行失败: ${event.toolName}`,
+                    details: { error: event.result },
+                  }).then();
+                }
+              }
             }
+          });
+
+          // Run the agent loop by prompting it with the user message
+          await agent.prompt(message);
+          
+          if (isThinking) {
+             sendEvent({ content: "\n</think>\n" });
           }
 
-          // Final aggregated result (for backward compat with any client code reading `content`)
-          sendEvent({ content: fullContent, liveComponent });
+          // Final aggregated result (for backward compat)
+          if (!finalError) {
+             sendEvent({ liveComponent });
+          }
 
-          // Async save (non-blocking)
+          // Background decoupled save
           if (client) {
-            void saveClassroomRecords(
+            saveClassroomRecords(
               client, sessionId, studentName, message,
-              fullContent, relatedPoints, subject
-            );
+              fullContent, relatedPoints, subject, finalError
+            ).catch(err => console.error("Background save error:", err));
           }
 
           sendEvent({ done: true });
         } catch (error) {
           const errMsg = error instanceof Error ? error.message : "未知错误";
           sendEvent({ error: errMsg });
+          
+          if (client) {
+             client.from("learning_records").insert({
+               student_name: studentName || "匿名学生",
+               subject: subject || "通用",
+               record_type: "error",
+               agent_type: "classroom_agent",
+               description: `课堂致命错误: ${errMsg}`,
+               details: { error: String(error) },
+             }).then();
+          }
         } finally {
           controller.close();
         }
@@ -212,7 +240,8 @@ async function saveClassroomRecords(
   message: string,
   fullContent: string,
   relatedPoints: string[],
-  subject: string | undefined
+  subject: string | undefined,
+  finalError: string | null
 ) {
   try {
     if (sessionId) {
@@ -223,15 +252,18 @@ async function saveClassroomRecords(
         content: message,
         message_type: "question",
       });
-      await client.from("classroom_messages").insert({
-        session_id: sessionId,
-        role: "agent",
-        sender: "课堂互动智能体",
-        content: fullContent,
-        message_type: "answer",
-        agent_type: "classroom_agent",
-        related_knowledge_points: relatedPoints,
-      });
+      
+      if (!finalError && fullContent) {
+        await client.from("classroom_messages").insert({
+          session_id: sessionId,
+          role: "agent",
+          sender: "课堂互动智能体",
+          content: fullContent,
+          message_type: "answer",
+          agent_type: "classroom_agent",
+          related_knowledge_points: relatedPoints,
+        });
+      }
     }
     await client.from("learning_records").insert({
       student_name: studentName || "匿名学生",
