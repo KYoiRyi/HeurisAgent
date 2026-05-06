@@ -6,15 +6,15 @@
 
 这里是平台的部分功能截图展示：
 
-![Dashboard/Monitor](docs/屏幕截图 2026-05-06 161155.png)
+![Dashboard/Monitor](docs/dashboard.png)
 
-![Classroom](docs/屏幕截图 2026-05-06 161711.png)
+![Classroom](docs/classroom.png)
 
-![Errors/Review](docs/屏幕截图 2026-05-06 161748.png)
+![Errors/Review](docs/errors-review.png)
 
-![Resources](docs/屏幕截图 2026-05-06 163442.png)
+![Resources](docs/resources.png)
 
-![Settings/Agents](docs/屏幕截图 2026-05-06 163451.png)
+![Settings/Agents](docs/settings.png)
 
 *(注：以上为不同模块的预览图，包括工作台、互动课堂、记忆与复习策略管理等。)*
 
