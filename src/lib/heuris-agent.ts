@@ -18,6 +18,7 @@ import type { AssistantMessage } from "@/lib/pi-ai/index";
 import { getActiveModel, getActiveApiKey } from "./model-config";
 import { getDb } from "./db";
 import { memoryStore } from "./memory";
+import { getSupabaseClient } from "@/storage/database/supabase-client";
 
 // ── Event bus for SSE clients ────────────────────────────────────────────────
 
@@ -172,6 +173,25 @@ const RenderLiveComponentSchema = Type.Object({
 });
 
 export function buildClassroomTools(): AgentTool[] {
+  const addMemoryTool: AgentTool<typeof AddMemorySchema> = {
+    name: "add_memory",
+    label: "Add Memory",
+    description: "Save important long-term facts or context.",
+    parameters: AddMemorySchema,
+    execute: async (_id, params: Static<typeof AddMemorySchema>) => {
+      memoryStore.add(params.content, {
+        source: "classroom_agent",
+        importance: 2,
+        tags: params.tags ?? [],
+      });
+      console.log(`[Classroom] add_memory: ${params.content.substring(0, 80)}`);
+      return {
+        content: [{ type: "text", text: "Memory saved successfully." }],
+        details: { saved: true, content: params.content },
+      };
+    },
+  };
+
   const renderLiveComponent: AgentTool<typeof RenderLiveComponentSchema> = {
     name: "render_live_component",
     label: "Render Live Component",
@@ -204,7 +224,87 @@ export function buildClassroomTools(): AgentTool[] {
     },
   };
 
-  return [renderLiveComponent, searchMemoryTool];
+  // 1. Tool: save_learning_resource
+  const SaveResourceSchema = Type.Object({
+    title: Type.String(),
+    content: Type.String({ description: "Markdown structured content for the resource (PPT/Note)." }),
+    subject: Type.String(),
+    tags: Type.Array(Type.String()),
+  });
+
+  const saveResourceTool: AgentTool<typeof SaveResourceSchema> = {
+    name: "save_learning_resource",
+    label: "Save Learning Resource",
+    description: "Save a structured learning resource (like a PPT slide or summary note) to the class database.",
+    parameters: SaveResourceSchema,
+    execute: async (_id, params: Static<typeof SaveResourceSchema>) => {
+      const client = getSupabaseClient();
+      if (!client) {
+         return { content: [{ type: "text", text: "Database client unavailable." }], details: { error: true } };
+      }
+      try {
+        await client.from("learning_resources").insert({
+          title: params.title,
+          content: params.content,
+          subject: params.subject,
+          category: "note",
+          tags: params.tags,
+          created_by: "classroom_agent",
+        });
+        console.log(`[Classroom] Saved resource: ${params.title}`);
+        return {
+          content: [{ type: "text", text: `Successfully saved learning resource: ${params.title}` }],
+          details: params,
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Failed to save resource: ${String(err)}` }], details: { error: err } };
+      }
+    },
+  };
+
+  // 2. Tool: save_error_question
+  const SaveErrorSchema = Type.Object({
+    student_name: Type.String(),
+    subject: Type.String(),
+    question_text: Type.String(),
+    student_answer: Type.Optional(Type.String()),
+    error_type: Type.String({ description: "Category of error: concept, calculation, careless, method" }),
+    error_analysis: Type.String(),
+  });
+
+  const saveErrorTool: AgentTool<typeof SaveErrorSchema> = {
+    name: "save_error_question",
+    label: "Save Error Question",
+    description: "Proactively record a student's mistake or misunderstanding to their error database for future review.",
+    parameters: SaveErrorSchema,
+    execute: async (_id, params: Static<typeof SaveErrorSchema>) => {
+      const client = getSupabaseClient();
+      if (!client) {
+         return { content: [{ type: "text", text: "Database client unavailable." }], details: { error: true } };
+      }
+      try {
+        await client.from("error_questions").insert({
+          student_name: params.student_name,
+          subject: params.subject,
+          question_text: params.question_text,
+          student_answer: params.student_answer,
+          error_type: params.error_type,
+          error_analysis: params.error_analysis,
+          status: "pending",
+        });
+        console.log(`[Classroom] Logged error for ${params.student_name}`);
+        return {
+          content: [{ type: "text", text: `Successfully logged error record for ${params.student_name}` }],
+          details: params,
+        };
+      } catch (err) {
+        return { content: [{ type: "text", text: `Failed to save error: ${String(err)}` }], details: { error: err } };
+      }
+    },
+  };
+
+  // 3. We also expose addMemoryTool to classroom agent
+  return [renderLiveComponent, searchMemoryTool, addMemoryTool, saveResourceTool, saveErrorTool];
 }
 
 // ── HeurisAgentRuntime ────────────────────────────────────────────────────────

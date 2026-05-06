@@ -3,6 +3,8 @@ import { getActiveModel, getActiveApiKey } from "@/lib/model-config";
 import { Agent } from "@/lib/pi-agent/agent";
 import type { AgentEvent as PiAgentEvent } from "@/lib/pi-agent/types";
 import { buildClassroomTools } from "@/lib/heuris-agent";
+import { loadSkills, formatSkillsForPrompt } from "@/lib/pi-agent/skills";
+import path from "path";
 import type { UserMessage, AssistantMessage as PiAssistantMessage } from "@/lib/pi-ai/index";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
 
@@ -75,9 +77,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Load agent skills
+    const skillsDir = path.join(process.cwd(), "data", "skills");
+    const loadedSkills = loadSkills(skillsDir);
+    const skillsPrompt = formatSkillsForPrompt(loadedSkills);
+
     // Build pi-ai context
     const systemPrompt =
       CLASSROOM_SYSTEM_PROMPT +
+      skillsPrompt +
       "\n\n" +
       `${sessionContext}${resourceContext}\n\n学科：${subject || "通用"}，学生：${studentName || "同学"}\n\nIf you need to show an interactive simulation, diagram, or applet, you MUST call the render_live_component tool! Do NOT write markdown code blocks for interactive apps.`;
 
