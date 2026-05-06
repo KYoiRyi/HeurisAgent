@@ -8,6 +8,7 @@ import path from "path";
 import type { UserMessage, AssistantMessage as PiAssistantMessage } from "@/lib/pi-ai/index";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
 import { sessionManager } from "@/lib/pi-agent/session-manager";
+import { memoryStore } from "@/lib/memory";
 
 const CLASSROOM_SYSTEM_PROMPT = `你是一个专业的课堂互动智能体，擅长实时提问解答和知识点联动讲解。
 
@@ -78,6 +79,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Auto-inject memory context for this student
+    const memoryContext = memoryStore.buildContext(studentName, 10);
+
     // Load agent skills
     const skillsDir = path.join(process.cwd(), "data", "skills");
     const loadedSkills = loadSkills(skillsDir);
@@ -88,6 +92,7 @@ export async function POST(request: NextRequest) {
       CLASSROOM_SYSTEM_PROMPT +
       skillsPrompt +
       "\n\n" +
+      (memoryContext ? memoryContext + "\n\n" : "") +
       `${sessionContext}${resourceContext}\n\n学科：${subject || "通用"}，学生：${studentName || "同学"}\n\nIf you need to show an interactive simulation, diagram, or applet, you MUST call the render_live_component tool! Do NOT write markdown code blocks for interactive apps.`;
 
     // Load agent history from stateful session manager

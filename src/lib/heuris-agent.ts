@@ -180,7 +180,7 @@ export function buildClassroomTools(): AgentTool[] {
     parameters: AddMemorySchema,
     execute: async (_id, params: Static<typeof AddMemorySchema>) => {
       memoryStore.add(params.content, {
-        source: "classroom_agent",
+        source: "classroom",
         importance: 2,
         tags: params.tags ?? [],
       });
