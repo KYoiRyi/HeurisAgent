@@ -7,6 +7,7 @@ import { loadSkills, formatSkillsForPrompt } from "@/lib/pi-agent/skills";
 import path from "path";
 import type { UserMessage, AssistantMessage as PiAssistantMessage } from "@/lib/pi-ai/index";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
+import { sessionManager } from "@/lib/pi-agent/session-manager";
 
 const CLASSROOM_SYSTEM_PROMPT = `你是一个专业的课堂互动智能体，擅长实时提问解答和知识点联动讲解。
 
@@ -89,29 +90,8 @@ export async function POST(request: NextRequest) {
       "\n\n" +
       `${sessionContext}${resourceContext}\n\n学科：${subject || "通用"}，学生：${studentName || "同学"}\n\nIf you need to show an interactive simulation, diagram, or applet, you MUST call the render_live_component tool! Do NOT write markdown code blocks for interactive apps.`;
 
-    // Build pi-ai Message array — user and assistant messages have different shapes
-    type SimpleMsg = UserMessage | PiAssistantMessage;
-    const piMessages: SimpleMsg[] = [];
-    
-    if (history && Array.isArray(history)) {
-      for (const msg of history.slice(-6)) {
-        if (msg.role === "student") {
-          piMessages.push({ role: "user", content: msg.content, timestamp: Date.now() });
-        } else {
-          piMessages.push({
-            role: "assistant",
-            content: [{ type: "text", text: msg.content }],
-            timestamp: Date.now(),
-            api: "openai-completions",
-            provider: "custom",
-            model: "unknown",
-            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
-            stopReason: "stop"
-          });
-        }
-      }
-    }
-    // We do NOT push the current message to piMessages here because we will use agent.prompt(message) below.
+    // Load agent history from stateful session manager
+    let piMessages = sessionId ? sessionManager.load(sessionId) : [];
 
     const model = getActiveModel();
     const apiKey = getActiveApiKey();
@@ -213,6 +193,13 @@ export async function POST(request: NextRequest) {
               client, sessionId, studentName, message,
               fullContent, relatedPoints, subject, finalError
             ).catch(err => console.error("Background save error:", err));
+          }
+          // Wait for agent to settle
+          await agent.waitForIdle();
+          
+          // Save the full, raw agent state including all tool calls and results
+          if (sessionId) {
+            sessionManager.save(sessionId, agent.state.messages);
           }
 
           sendEvent({ done: true });

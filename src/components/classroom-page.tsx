@@ -92,11 +92,6 @@ export default function ClassroomPage() {
     setMessages((prev) => [...prev, agentMessage]);
 
     try {
-      const history = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-
       const response = await fetch("/api/classroom", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -105,7 +100,6 @@ export default function ClassroomPage() {
           sessionId,
           subject,
           studentName,
-          history,
         }),
       });
 
