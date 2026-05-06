@@ -1,123 +1,67 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { execSync } from 'child_process';
-import { getReportBuffer, createWrappedFetch } from 'coze-coding-dev-sdk';
+/**
+ * Supabase client factory.
+ *
+ * Reads credentials from environment variables.  When running locally without
+ * a Supabase instance the variables may be absent; in that case
+ * `getSupabaseClient()` returns `null` and callers must handle that gracefully
+ * (fall back to empty / mock data rather than throwing a 500).
+ *
+ * Supported env vars (set in .env.local):
+ *   SUPABASE_URL              — your project URL
+ *   SUPABASE_ANON_KEY         — anon / public key
+ *   SUPABASE_SERVICE_ROLE_KEY — service-role key (optional, for backend writes)
+ *
+ * Legacy Coze-platform names are also accepted as fallbacks:
+ *   COZE_SUPABASE_URL, COZE_SUPABASE_ANON_KEY, COZE_SUPABASE_SERVICE_ROLE_KEY
+ */
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 let envLoaded = false;
 
+function loadEnv(): void {
+  if (envLoaded) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("dotenv").config({ path: ".env.local" });
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("dotenv").config(); // also load .env
+  } catch {
+    // dotenv not available in edge runtime — env vars must be set externally
+  }
+  envLoaded = true;
+}
+
+function resolveEnv(key: string, legacyKey?: string): string | undefined {
+  return process.env[key] || (legacyKey ? process.env[legacyKey] : undefined);
+}
+
 interface SupabaseCredentials {
   url: string;
-  anonKey: string;
+  key: string;
 }
 
-function loadEnv(): void {
-  if (envLoaded || (process.env.COZE_SUPABASE_URL && process.env.COZE_SUPABASE_ANON_KEY)) {
-    return;
-  }
-
-  try {
-    try {
-      require('dotenv').config();
-      if (process.env.COZE_SUPABASE_URL && process.env.COZE_SUPABASE_ANON_KEY) {
-        envLoaded = true;
-        return;
-      }
-    } catch {
-      // dotenv not available
-    }
-
-    const pythonCode = `
-import os
-import sys
-try:
-    from coze_workload_identity import Client
-    client = Client()
-    env_vars = client.get_project_env_vars()
-    client.close()
-    for env_var in env_vars:
-        print(f"{env_var.key}={env_var.value}")
-except Exception as e:
-    print(f"# Error: {e}", file=sys.stderr)
-`;
-
-    const output = execSync(`python3 -c '${pythonCode.replace(/'/g, "'\"'\"'")}'`, {
-      encoding: 'utf-8',
-      timeout: 10000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    const lines = output.trim().split('\n');
-    for (const line of lines) {
-      if (line.startsWith('#')) continue;
-      const eqIndex = line.indexOf('=');
-      if (eqIndex > 0) {
-        const key = line.substring(0, eqIndex);
-        let value = line.substring(eqIndex + 1);
-        if ((value.startsWith("'") && value.endsWith("'")) ||
-            (value.startsWith('"') && value.endsWith('"'))) {
-          value = value.slice(1, -1);
-        }
-        if (!process.env[key]) {
-          process.env[key] = value;
-        }
-      }
-    }
-
-    envLoaded = true;
-  } catch {
-    // Silently fail
-  }
-}
-
-function getSupabaseCredentials(): SupabaseCredentials {
+function getCredentials(): SupabaseCredentials | null {
   loadEnv();
+  const url =
+    resolveEnv("SUPABASE_URL", "COZE_SUPABASE_URL");
+  const serviceKey =
+    resolveEnv("SUPABASE_SERVICE_ROLE_KEY", "COZE_SUPABASE_SERVICE_ROLE_KEY");
+  const anonKey =
+    resolveEnv("SUPABASE_ANON_KEY", "COZE_SUPABASE_ANON_KEY");
 
-  const url = process.env.COZE_SUPABASE_URL;
-  const anonKey = process.env.COZE_SUPABASE_ANON_KEY;
-
-  if (!url) {
-    throw new Error('COZE_SUPABASE_URL is not set');
-  }
-  if (!anonKey) {
-    throw new Error('COZE_SUPABASE_ANON_KEY is not set');
-  }
-
-  return { url, anonKey };
+  if (!url || (!serviceKey && !anonKey)) return null;
+  return { url, key: serviceKey ?? anonKey! };
 }
 
-function getSupabaseServiceRoleKey(): string | undefined {
-  loadEnv();
-  return process.env.COZE_SUPABASE_SERVICE_ROLE_KEY;
-}
+/**
+ * Returns a Supabase client, or `null` when credentials are not configured.
+ * All API routes should guard: `if (!client) return emptyFallback`.
+ */
+export function getSupabaseClient(_token?: string): SupabaseClient | null {
+  const creds = getCredentials();
+  if (!creds) return null;
 
-function getSupabaseClient(token?: string): SupabaseClient {
-  const { url, anonKey } = getSupabaseCredentials();
-
-  let key: string;
-  if (token) {
-    key = anonKey;
-  } else {
-    const serviceRoleKey = getSupabaseServiceRoleKey();
-    key = serviceRoleKey ?? anonKey;
-  }
-
-  const globalOptions: Record<string, any> = {};
-  if (token) {
-    globalOptions.headers = { Authorization: `Bearer ${token}` };
-  }
-  try {
-    const buffer = getReportBuffer();
-    if (buffer) {
-      globalOptions.fetch = createWrappedFetch(buffer, 'supabase');
-    }
-  } catch {
-    // Silent — reporting setup failure should not block client creation
-  }
-
-  return createClient(url, key, {
-    global: globalOptions,
-    db: {
-      timeout: 60000,
-    },
+  return createClient(creds.url, creds.key, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -125,4 +69,13 @@ function getSupabaseClient(token?: string): SupabaseClient {
   });
 }
 
-export { loadEnv, getSupabaseCredentials, getSupabaseServiceRoleKey, getSupabaseClient };
+/** @deprecated Use getSupabaseClient() — now returns null when unconfigured */
+export function getSupabaseCredentials() {
+  const creds = getCredentials();
+  if (!creds) throw new Error("Supabase credentials not configured");
+  return { url: creds.url, anonKey: creds.key };
+}
+
+export function isSupabaseConfigured(): boolean {
+  return getCredentials() !== null;
+}

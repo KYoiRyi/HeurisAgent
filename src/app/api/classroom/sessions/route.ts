@@ -5,6 +5,9 @@ import { getSupabaseClient } from "@/storage/database/supabase-client";
 export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
+    if (!client) {
+      return NextResponse.json({ success: true, data: [] });
+    }
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 
@@ -39,6 +42,9 @@ export async function POST(request: NextRequest) {
     }
 
     const client = getSupabaseClient();
+    if (!client) {
+      return NextResponse.json({ error: "数据库未配置" }, { status: 503 });
+    }
 
     const { data, error } = await client
       .from("classroom_sessions")

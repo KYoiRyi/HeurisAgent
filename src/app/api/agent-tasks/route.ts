@@ -5,6 +5,9 @@ import { getSupabaseClient } from "@/storage/database/supabase-client";
 export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
+    if (!client) {
+      return NextResponse.json({ success: true, data: [] });
+    }
     const { searchParams } = new URL(request.url);
     const sourceAgent = searchParams.get("source_agent");
     const targetAgent = searchParams.get("target_agent");
@@ -43,6 +46,9 @@ export async function POST(request: NextRequest) {
     }
 
     const client = getSupabaseClient();
+    if (!client) {
+      return NextResponse.json({ error: "数据库未配置" }, { status: 503 });
+    }
 
     const { data, error } = await client
       .from("agent_tasks")
@@ -77,6 +83,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     const client = getSupabaseClient();
+    if (!client) {
+      return NextResponse.json({ error: "数据库未配置" }, { status: 503 });
+    }
 
     const updateData: Record<string, unknown> = { status };
     if (status === "running") updateData.started_at = new Date().toISOString();

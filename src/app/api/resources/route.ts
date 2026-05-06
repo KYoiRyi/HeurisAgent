@@ -12,6 +12,9 @@ export async function POST(request: NextRequest) {
     }
 
     const client = getSupabaseClient();
+    if (!client) {
+      return NextResponse.json({ error: "数据库未配置" }, { status: 503 });
+    }
 
     const { data, error } = await client
       .from("learning_resources")
@@ -51,6 +54,9 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
+    if (!client) {
+      return NextResponse.json({ success: true, data: [] });
+    }
     const { searchParams } = new URL(request.url);
     const subject = searchParams.get("subject");
     const category = searchParams.get("category");

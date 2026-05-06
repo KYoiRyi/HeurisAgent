@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { LLMClient, Config, HeaderUtils } from "coze-coding-dev-sdk";
+import { llmStream } from "@/lib/llm-client";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
 
 const CLASSROOM_SYSTEM_PROMPT = `你是一个专业的课堂互动智能体，擅长实时提问解答和知识点联动讲解。
@@ -19,7 +19,8 @@ const CLASSROOM_SYSTEM_PROMPT = `你是一个专业的课堂互动智能体，�
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, sessionId, subject, studentName, history } = await request.json();
+    const { message, sessionId, subject, studentName, history } =
+      await request.json();
 
     if (!message) {
       return NextResponse.json({ error: "消息内容不能为空" }, { status: 400 });
@@ -27,10 +28,10 @@ export async function POST(request: NextRequest) {
 
     const client = getSupabaseClient();
 
-    // 获取会话上下文
+    // 获取会话上下文（可选，DB可能不可用）
     let sessionContext = "";
     let relatedPoints: string[] = [];
-    if (sessionId) {
+    if (client && sessionId) {
       const { data: session } = await client
         .from("classroom_sessions")
         .select("title, subject, topic_summary, key_points")
@@ -48,9 +49,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 获取相关教学资源
+    // 获取相关教学资源（可选）
     let resourceContext = "";
-    if (subject) {
+    if (client && subject) {
       const { data: resources } = await client
         .from("learning_resources")
         .select("title, content, tags")
@@ -59,10 +60,14 @@ export async function POST(request: NextRequest) {
         .limit(3);
 
       if (resources && resources.length > 0) {
-        resourceContext = "\n\n相关教学资源参考：\n" +
-          resources.map((r: { title: string; content: string | null }, i: number) =>
-            `${i + 1}. ${r.title}${r.content ? `：${r.content.substring(0, 200)}` : ""}`
-          ).join("\n");
+        resourceContext =
+          "\n\n相关教学资源参考：\n" +
+          resources
+            .map(
+              (r: { title: string; content: string | null }, i: number) =>
+                `${i + 1}. ${r.title}${r.content ? `：${r.content.substring(0, 200)}` : ""}`
+            )
+            .join("\n");
       }
     }
 
@@ -71,7 +76,7 @@ export async function POST(request: NextRequest) {
       { role: "system", content: CLASSROOM_SYSTEM_PROMPT },
       {
         role: "system",
-        content: `${sessionContext}${resourceContext}\n\n学科：${subject || "通用"}，学生：${studentName || "同学"}`
+        content: `${sessionContext}${resourceContext}\n\n学科：${subject || "通用"}，学生：${studentName || "同学"}`,
       },
     ];
 
@@ -84,12 +89,7 @@ export async function POST(request: NextRequest) {
         });
       }
     }
-
     messages.push({ role: "user", content: message });
-
-    const config = new Config();
-    const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-    const llmClient = new LLMClient(config, customHeaders);
 
     // 流式响应
     const encoder = new TextEncoder();
@@ -97,51 +97,20 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         let fullContent = "";
         try {
-          const llmStream = llmClient.stream(messages, {
-            model: "doubao-seed-1-8-251228",
-            temperature: 0.7,
-          });
-
-          for await (const chunk of llmStream) {
-            if (chunk.content) {
-              const text = chunk.content.toString();
-              fullContent += text;
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ content: text })}\n\n`)
-              );
-            }
+          for await (const chunk of llmStream(messages, { temperature: 0.7 })) {
+            fullContent += chunk;
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`)
+            );
           }
 
-          // 保存消息到数据库
-          if (sessionId) {
-            await client.from("classroom_messages").insert({
-              session_id: sessionId,
-              role: "student",
-              sender: studentName || "学生",
-              content: message,
-              message_type: "question",
-            });
-
-            await client.from("classroom_messages").insert({
-              session_id: sessionId,
-              role: "agent",
-              sender: "课堂互动智能体",
-              content: fullContent,
-              message_type: "answer",
-              agent_type: "classroom_agent",
-              related_knowledge_points: relatedPoints,
-            });
+          // 异步保存记录（不阻塞响应）
+          if (client) {
+            void saveClassroomRecords(
+              client, sessionId, studentName, message,
+              fullContent, relatedPoints, subject
+            );
           }
-
-          // 记录学习行为
-          await client.from("learning_records").insert({
-            student_name: studentName || "匿名学生",
-            subject: subject || "通用",
-            record_type: "classroom",
-            agent_type: "classroom_agent",
-            description: `课堂提问：${message.substring(0, 100)}`,
-            details: { question: message, answer_length: fullContent.length },
-          });
 
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`)
@@ -170,10 +139,55 @@ export async function POST(request: NextRequest) {
   }
 }
 
+async function saveClassroomRecords(
+  client: NonNullable<ReturnType<typeof getSupabaseClient>>,
+  sessionId: string | undefined,
+  studentName: string | undefined,
+  message: string,
+  fullContent: string,
+  relatedPoints: string[],
+  subject: string | undefined
+) {
+  try {
+    if (sessionId) {
+      await client.from("classroom_messages").insert({
+        session_id: sessionId,
+        role: "student",
+        sender: studentName || "学生",
+        content: message,
+        message_type: "question",
+      });
+      await client.from("classroom_messages").insert({
+        session_id: sessionId,
+        role: "agent",
+        sender: "课堂互动智能体",
+        content: fullContent,
+        message_type: "answer",
+        agent_type: "classroom_agent",
+        related_knowledge_points: relatedPoints,
+      });
+    }
+    await client.from("learning_records").insert({
+      student_name: studentName || "匿名学生",
+      subject: subject || "通用",
+      record_type: "classroom",
+      agent_type: "classroom_agent",
+      description: `课堂提问：${message.substring(0, 100)}`,
+      details: { question: message, answer_length: fullContent.length },
+    });
+  } catch (err) {
+    console.error("[classroom] Failed to save records:", err);
+  }
+}
+
 // 获取课堂会话列表
 export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
+    if (!client) {
+      return NextResponse.json({ success: true, data: [] });
+    }
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 

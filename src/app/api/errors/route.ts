@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { LLMClient, Config, HeaderUtils } from "coze-coding-dev-sdk";
+import { llmInvoke } from "@/lib/llm-client";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
 
 const ERROR_AGENT_SYSTEM_PROMPT = `你是一个专业的错题管理智能体，擅长错题分析、分类和针对性强化建议生成。
@@ -22,8 +22,13 @@ const ERROR_AGENT_SYSTEM_PROMPT = `你是一个专业的错题管理智能体，
 export async function POST(request: NextRequest) {
   try {
     const {
-      questionText, studentAnswer, correctAnswer, subject,
-      studentName, sessionId, questionId
+      questionText,
+      studentAnswer,
+      correctAnswer,
+      subject,
+      studentName,
+      sessionId,
+      questionId,
     } = await request.json();
 
     if (!questionText) {
@@ -32,9 +37,9 @@ export async function POST(request: NextRequest) {
 
     const client = getSupabaseClient();
 
-    // 获取学生历史错题模式
+    // 获取学生历史错题模式（可选）
     let historyContext = "";
-    if (studentName && subject) {
+    if (client && studentName && subject) {
       const { data: pastErrors } = await client
         .from("error_questions")
         .select("error_type, knowledge_points")
@@ -44,15 +49,18 @@ export async function POST(request: NextRequest) {
         .limit(5);
 
       if (pastErrors && pastErrors.length > 0) {
-        const errorTypes = pastErrors.map((e: { error_type: string | null }) => e.error_type).filter(Boolean);
+        const errorTypes = pastErrors
+          .map((e: { error_type: string | null }) => e.error_type)
+          .filter(Boolean);
         const knowledgeGaps = pastErrors
-          .flatMap((e: { knowledge_points: unknown }) => (Array.isArray(e.knowledge_points) ? e.knowledge_points : []))
+          .flatMap((e: { knowledge_points: unknown }) =>
+            Array.isArray(e.knowledge_points) ? e.knowledge_points : []
+          )
           .filter(Boolean);
         historyContext = `\n\n该学生近期错题模式：常见错误类型有 ${[...new Set(errorTypes)].join("、")}；知识薄弱点集中在 ${[...new Set(knowledgeGaps)].join("、")}`;
       }
     }
 
-    // 构建分析提示
     const analysisPrompt = `请分析以下错题：
 
 学科：${subject || "未知"}
@@ -63,19 +71,12 @@ ${historyContext}
 
 请给出详细的错因分析、分类和强化建议。`;
 
-    const config = new Config();
-    const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-    const llmClient = new LLMClient(config, customHeaders);
-
     const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
       { role: "system", content: ERROR_AGENT_SYSTEM_PROMPT },
       { role: "user", content: analysisPrompt },
     ];
 
-    const response = await llmClient.invoke(messages, {
-      model: "doubao-seed-1-8-251228",
-      temperature: 0.3,
-    });
+    const response = await llmInvoke(messages, { temperature: 0.3 });
 
     // 解析 LLM 返回的分析结果
     let analysisResult: Record<string, unknown> = {};
@@ -94,78 +95,78 @@ ${historyContext}
       };
     }
 
-    // 更新或创建错题记录
+    // 更新或创建错题记录（如果 DB 可用）
     let errorRecordId = questionId;
-    if (questionId) {
-      await client
-        .from("error_questions")
-        .update({
-          error_type: analysisResult.error_type as string,
-          error_analysis: analysisResult.error_analysis as string,
+    if (client) {
+      if (questionId) {
+        await client
+          .from("error_questions")
+          .update({
+            error_type: analysisResult.error_type as string,
+            error_analysis: analysisResult.error_analysis as string,
+            knowledge_points: analysisResult.knowledge_points,
+            reinforcement_suggestions: analysisResult.reinforcement_suggestions as string,
+            status: "analyzed",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", questionId);
+      } else {
+        const { data, error } = await client
+          .from("error_questions")
+          .insert({
+            student_name: studentName || "匿名学生",
+            subject: subject || "通用",
+            question_text: questionText,
+            student_answer: studentAnswer,
+            correct_answer: correctAnswer,
+            error_type: (analysisResult.error_type as string) || "未分类",
+            error_analysis: analysisResult.error_analysis as string,
+            knowledge_points: analysisResult.knowledge_points || [],
+            reinforcement_suggestions: analysisResult.reinforcement_suggestions as string,
+            status: "analyzed",
+            session_id: sessionId,
+          })
+          .select();
+
+        if (error) throw new Error(`插入失败: ${error.message}`);
+        if (data && data[0]) errorRecordId = data[0].id;
+      }
+
+      // 创建智能体协同任务
+      await client.from("agent_tasks").insert({
+        task_type: "analyze_weakness",
+        source_agent: "error_agent",
+        target_agent: "review_agent",
+        status: "pending",
+        priority: "high",
+        input_data: {
+          student_name: studentName,
+          subject,
+          error_id: errorRecordId,
+          error_type: analysisResult.error_type,
           knowledge_points: analysisResult.knowledge_points,
-          reinforcement_suggestions: analysisResult.reinforcement_suggestions as string,
-          status: "analyzed",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", questionId);
-    } else {
-      const { data, error } = await client
-        .from("error_questions")
-        .insert({
-          student_name: studentName || "匿名学生",
-          subject: subject || "通用",
-          question_text: questionText,
-          student_answer: studentAnswer,
-          correct_answer: correctAnswer,
-          error_type: (analysisResult.error_type as string) || "未分类",
-          error_analysis: analysisResult.error_analysis as string,
-          knowledge_points: analysisResult.knowledge_points || [],
-          reinforcement_suggestions: analysisResult.reinforcement_suggestions as string,
-          status: "analyzed",
-          session_id: sessionId,
-        })
-        .select();
+        },
+        related_record_ids: [errorRecordId],
+      });
 
-      if (error) throw new Error(`插入失败: ${error.message}`);
-      if (data && data[0]) errorRecordId = data[0].id;
+      // 记录学习行为
+      await client.from("learning_records").insert({
+        student_name: studentName || "匿名学生",
+        subject: subject || "通用",
+        record_type: "error",
+        agent_type: "error_agent",
+        description: `错题分析：${(questionText as string).substring(0, 80)}`,
+        details: analysisResult,
+      });
     }
-
-    // 创建智能体协同任务：通知复习策略智能体
-    await client.from("agent_tasks").insert({
-      task_type: "analyze_weakness",
-      source_agent: "error_agent",
-      target_agent: "review_agent",
-      status: "pending",
-      priority: "high",
-      input_data: {
-        student_name: studentName,
-        subject,
-        error_id: errorRecordId,
-        error_type: analysisResult.error_type,
-        knowledge_points: analysisResult.knowledge_points,
-      },
-      related_record_ids: [errorRecordId],
-    });
-
-    // 记录学习行为
-    await client.from("learning_records").insert({
-      student_name: studentName || "匿名学生",
-      subject: subject || "通用",
-      record_type: "error",
-      agent_type: "error_agent",
-      description: `错题分析：${(questionText as string).substring(0, 80)}`,
-      details: analysisResult,
-    });
 
     return NextResponse.json({
       success: true,
-      data: {
-        id: errorRecordId,
-        ...analysisResult,
-      },
+      data: { id: errorRecordId, ...analysisResult },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "服务器错误";
+    console.error("[/api/errors POST]", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -174,6 +175,10 @@ ${historyContext}
 export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
+    if (!client) {
+      return NextResponse.json({ success: true, data: [] });
+    }
+
     const { searchParams } = new URL(request.url);
     const studentName = searchParams.get("student_name");
     const subject = searchParams.get("subject");

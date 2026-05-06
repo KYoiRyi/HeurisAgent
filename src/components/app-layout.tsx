@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, MessageSquareText, BookX, CalendarClock,
   FolderOpen, Activity, Bot, Menu, X, GraduationCap,
-  ChevronRight, Sparkles
+  ChevronRight, Sparkles, Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,15 +19,25 @@ const navItems = [
   { href: "/review", label: "复习策略", icon: CalendarClock, color: "text-purple-500", agent: "复习智能体" },
   { href: "/resources", label: "教学资源", icon: FolderOpen, color: "text-cyan-500" },
   { href: "/monitor", label: "智能体监控", icon: Activity, color: "text-rose-500" },
+  { href: "/settings", label: "AI 设置", icon: Settings, color: "text-slate-500" },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [llmOk, setLlmOk] = useState<boolean | null>(null);
+  const [llmModel, setLlmModel] = useState("");
 
   useEffect(() => {
     setMounted(true);
+    fetch("/api/v1/health")
+      .then((r) => r.json())
+      .then((d) => {
+        setLlmOk(d.services?.llm?.ok ?? false);
+        setLlmModel(d.services?.llm?.model || "");
+      })
+      .catch(() => setLlmOk(false));
   }, []);
 
   if (!mounted) {
@@ -106,27 +116,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Agent Status */}
+        {/* LLM Status */}
         {sidebarOpen && (
           <div className="absolute bottom-0 left-0 right-0 border-t p-4">
-            <div className="rounded-lg bg-gradient-to-br from-primary/5 to-primary/10 p-3">
-              <div className="flex items-center gap-2 mb-2">
+            <Link href="/settings" className="block rounded-lg bg-gradient-to-br from-primary/5 to-primary/10 p-3 hover:from-primary/10 hover:to-primary/15 transition-colors">
+              <div className="flex items-center gap-2 mb-1.5">
                 <Bot className="h-4 w-4 text-primary" />
-                <span className="text-xs font-semibold">智能体状态</span>
+                <span className="text-xs font-semibold">AI 提供商</span>
+                <div className={cn(
+                  "ml-auto h-2 w-2 rounded-full",
+                  llmOk === null ? "bg-yellow-400 animate-pulse" :
+                  llmOk ? "bg-emerald-500 animate-pulse" : "bg-red-500"
+                )} />
               </div>
-              <div className="grid grid-cols-3 gap-1.5">
-                {[
-                  { name: "课堂", status: "active", color: "bg-emerald-500" },
-                  { name: "错题", status: "active", color: "bg-orange-500" },
-                  { name: "复习", status: "active", color: "bg-purple-500" },
-                ].map((agent) => (
-                  <div key={agent.name} className="flex items-center gap-1">
-                    <div className={cn("h-1.5 w-1.5 rounded-full", agent.color, "animate-pulse")} />
-                    <span className="text-[10px] text-muted-foreground">{agent.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+              <p className="text-[10px] text-muted-foreground truncate">
+                {llmOk === null ? "检测中…" :
+                 llmOk ? ("✓ 已连接" + (llmModel ? " · " + llmModel : "")) :
+                 "⚠ LLM 未连接 — 点击配置"}
+              </p>
+            </Link>
           </div>
         )}
       </aside>
@@ -150,9 +158,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </span>
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <Badge variant="outline" className="text-xs">
+            <Badge
+              variant={llmOk === false ? "destructive" : "outline"}
+              className="text-xs"
+            >
               <Bot className="h-3 w-3 mr-1" />
-              3 智能体在线
+              {llmOk === null ? "检测中" : llmOk ? "AI 在线" : "AI 离线"}
             </Badge>
           </div>
         </header>

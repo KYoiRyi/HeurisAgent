@@ -1,9 +1,8 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // outputFileTracingRoot: path.resolve(__dirname, '../../'),  // Uncomment and add 'import path from "path"' if needed
-  /* config options here */
-  allowedDevOrigins: ['*.dev.coze.site'],
+  // Allow local development from any origin
+  allowedDevOrigins: ['localhost', '127.0.0.1', '*.dev.coze.site'],
   images: {
     remotePatterns: [
       {
@@ -12,6 +11,14 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
     ],
+  },
+  // Rewrite /v1/* → /api/v1/* so OpenAI clients can point directly at this server
+  async rewrites() {
+    return [
+      { source: '/v1/chat/completions', destination: '/api/v1/chat/completions' },
+      { source: '/v1/models', destination: '/api/v1/models' },
+      { source: '/v1/health', destination: '/api/v1/health' },
+    ];
   },
 };
 

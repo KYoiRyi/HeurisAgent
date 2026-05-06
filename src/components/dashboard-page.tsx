@@ -41,6 +41,7 @@ interface DashboardData {
     recentRecords: Array<{ record_type: string; created_at: string }>;
     activePlans: Array<{ plan_title: string; subject: string; status: string; progress: number; total_tasks: number; completed_tasks: number }>;
   } | null;
+  _offline?: boolean;
 }
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
@@ -52,20 +53,41 @@ const AGENT_NAMES: Record<string, string> = {
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
-  const [studentName, setStudentName] = useState("张三");
+  const [studentName, setStudentName] = useState("");
+  const [inputName, setInputName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [offline, setOffline] = useState(false);
+
+  // Load persisted name from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("heuris_student_name") || "";
+    setStudentName(saved);
+    setInputName(saved);
+  }, []);
 
   const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch(`/api/dashboard?student_name=${encodeURIComponent(studentName)}`);
+      const url = studentName
+        ? `/api/dashboard?student_name=${encodeURIComponent(studentName)}`
+        : "/api/dashboard";
+      const res = await fetch(url);
       const json = await res.json();
-      if (json.success) setData(json.data);
+      if (json.success) {
+        setData(json.data);
+        setOffline(!!json._offline);
+      }
     } catch (err) {
       console.error("Dashboard fetch error:", err);
     } finally {
       setLoading(false);
     }
   }, [studentName]);
+
+  const handleQuery = () => {
+    localStorage.setItem("heuris_student_name", inputName);
+    setStudentName(inputName);
+  };
 
   useEffect(() => {
     fetchData();
@@ -112,6 +134,13 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Offline banner */}
+      {offline && (
+        <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-2.5 text-sm text-yellow-600 dark:text-yellow-400">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>数据库未连接 — 请在 <code className="font-mono text-xs">.env.local</code> 中配置 <code className="font-mono text-xs">SUPABASE_URL</code> 和 <code className="font-mono text-xs">SUPABASE_ANON_KEY</code>。当前显示空数据。</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -123,12 +152,13 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-2">
           <Input
-            placeholder="输入学生姓名"
-            value={studentName}
-            onChange={(e) => setStudentName(e.target.value)}
+            placeholder="输入你的姓名"
+            value={inputName}
+            onChange={(e) => setInputName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleQuery()}
             className="w-40"
           />
-          <Button size="sm" onClick={fetchData}>查询</Button>
+          <Button size="sm" onClick={handleQuery}>查询</Button>
         </div>
       </div>
 
