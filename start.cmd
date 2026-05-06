@@ -35,7 +35,7 @@ for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":5000 " ^| findstr "L
 echo [INFO] Starting dev server at http://localhost:5000
 echo.
 
-:: Run next dev directly â€” do NOT use setlocal/endlocal around a long-lived process
+:: Run next dev directly â€?do NOT use setlocal/endlocal around a long-lived process
 :: Do NOT use `call` so Ctrl+C closes cleanly without showing "Terminate batch job?"
 node_modules\.bin\next.cmd dev -p 5000
 
