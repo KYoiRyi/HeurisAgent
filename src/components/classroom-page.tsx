@@ -635,9 +635,8 @@ export default function ClassroomPage() {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight flex items-center gap-3">
             <MessageSquareText className="h-8 w-8 text-emerald-500" />
-            课堂互动智能体 (Live)
+            课堂互动智能体
           </h1>
-          <p className="text-muted-foreground mt-2 text-base">按学科保留课堂对话 · 知识点/错题/黑板结果自动联动</p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={selectedSubject} onValueChange={setSelectedSubject} disabled={isStreaming}>
@@ -687,7 +686,7 @@ export default function ClassroomPage() {
         <ResizablePanel defaultSize={50} minSize={30} className="bg-background flex flex-col relative">
           <div className="flex items-center p-3 border-b shrink-0 bg-muted/30">
             <Bot className="h-4 w-4 mr-2 text-emerald-500" />
-            <span className="text-sm font-semibold">互动黑板 (Stage)</span>
+            <span className="text-sm font-semibold">互动黑板</span>
           </div>
           <div className="border-b bg-background/80 px-3 py-2 shrink-0">
             <div className="flex items-center gap-2">

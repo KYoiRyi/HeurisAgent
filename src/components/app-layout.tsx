@@ -70,7 +70,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {sidebarOpen && (
               <div className="flex flex-col">
                 <span className="text-base font-bold tracking-tight">EduAgentX</span>
-                <span className="text-[10px] text-muted-foreground leading-none">多智能体学习平台</span>
               </div>
             )}
           </Link>
@@ -153,9 +152,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <GraduationCap className="h-4 w-4" />
             <ChevronRight className="h-3 w-3" />
             <span className="font-medium text-foreground">
-              {navItems.find((item) =>
-                item.href === pathname || (item.href !== "/" && pathname.startsWith(item.href))
-              )?.label || "仪表盘"}
+              EduAgentX
             </span>
           </div>
           <div className="ml-auto flex items-center gap-3">
