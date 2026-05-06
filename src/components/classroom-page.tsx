@@ -45,9 +45,24 @@ export default function ClassroomPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Load identity from localStorage
+  useEffect(() => {
+    const savedSubject = localStorage.getItem("heuris_subject");
+    const savedName = localStorage.getItem("heuris_studentName");
+    if (savedSubject) setSubject(savedSubject);
+    if (savedName) setStudentName(savedName);
+  }, []);
+
+  // Save identity to localStorage
+  useEffect(() => {
+    localStorage.setItem("heuris_subject", subject);
+    localStorage.setItem("heuris_studentName", studentName);
+  }, [subject, studentName]);
+
+  // Auto scroll to bottom
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      scrollRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
 
@@ -228,7 +243,7 @@ export default function ClassroomPage() {
       </div>
 
       {/* Main Split Layout */}
-      <ResizablePanelGroup direction="horizontal" className="flex-1 rounded-lg border">
+      <ResizablePanelGroup orientation="horizontal" className="flex-1 rounded-lg border">
         {/* Stage Pane */}
         <ResizablePanel defaultSize={50} minSize={30} className="bg-background flex flex-col relative">
           <div className="flex items-center p-3 border-b shrink-0 bg-muted/30">
@@ -278,7 +293,7 @@ export default function ClassroomPage() {
 
         {/* Chat Pane */}
         <ResizablePanel defaultSize={50} minSize={30} className="flex flex-col bg-muted/10">
-          <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+          <ScrollArea className="flex-1 p-4">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-20">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/20 mb-4">
@@ -348,6 +363,7 @@ export default function ClassroomPage() {
                 ))}
               </div>
             )}
+            <div ref={scrollRef} className="h-4" />
           </ScrollArea>
           
           <div className="p-3 bg-background border-t">

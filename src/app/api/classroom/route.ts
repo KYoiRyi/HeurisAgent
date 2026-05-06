@@ -165,7 +165,15 @@ export async function POST(request: NextRequest) {
             } else if (event.type === "tool_execution_start") {
               if (event.toolName === "render_live_component") {
                 liveComponent = event.args as Record<string, string>;
-                sendEvent({ type: "tool_call", toolName: "render_live_component", args: liveComponent });
+                sendEvent({ content: `\n\n*(正在渲染互动黑板组件: ${liveComponent.description || "加载中..."})*` });
+              } else if (event.toolName === "search_memory") {
+                sendEvent({ content: `\n\n*[系统：智能体正在检索记忆...]*` });
+              } else if (event.toolName === "add_memory") {
+                sendEvent({ content: `\n\n*[系统：智能体正在保存上下文记忆...]*` });
+              } else if (event.toolName === "save_learning_resource") {
+                sendEvent({ content: `\n\n*[系统：智能体正在生成课堂板书/资源...]*` });
+              } else if (event.toolName === "save_error_question") {
+                sendEvent({ content: `\n\n*[系统：智能体已记录错题分析，便于后续复习]*` });
               }
             } else if (event.type === "tool_execution_end") {
               if (event.isError) {
@@ -195,7 +203,7 @@ export async function POST(request: NextRequest) {
           }
 
           // Final aggregated result (for backward compat)
-          if (!finalError) {
+          if (!finalError && liveComponent) {
              sendEvent({ liveComponent });
           }
 
