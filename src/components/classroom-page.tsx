@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
@@ -66,8 +65,41 @@ export default function ClassroomPage() {
     }
   }, [messages]);
 
+  const handleCreateSession = async () => {
+    try {
+      const res = await fetch("/api/classroom/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `${subject}课堂 - ${new Date().toLocaleDateString("zh-CN")}`,
+          subject,
+          teacher: "AI教师",
+          topicSummary: `${subject}学科实时互动课堂`,
+          keyPoints: [],
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setSessionId(json.data.id);
+        return json.data.id;
+      }
+    } catch (err) {
+      console.error("Create session error:", err);
+    }
+    return null;
+  };
+
   const handleSend = async () => {
     if (!inputValue.trim() || isStreaming) return;
+
+    let activeSessionId = sessionId;
+    if (!activeSessionId) {
+      activeSessionId = await handleCreateSession();
+      if (!activeSessionId) {
+        console.error("Failed to create session automatically");
+        return;
+      }
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -97,7 +129,7 @@ export default function ClassroomPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMessage.content,
-          sessionId,
+          sessionId: activeSessionId,
           subject,
           studentName,
         }),
@@ -160,28 +192,6 @@ export default function ClassroomPage() {
         )
       );
       setIsStreaming(false);
-    }
-  };
-
-  const handleCreateSession = async () => {
-    try {
-      const res = await fetch("/api/classroom/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `${subject}课堂 - ${new Date().toLocaleDateString("zh-CN")}`,
-          subject,
-          teacher: "AI教师",
-          topicSummary: `${subject}学科实时互动课堂`,
-          keyPoints: [],
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setSessionId(json.data.id);
-      }
-    } catch (err) {
-      console.error("Create session error:", err);
     }
   };
 
@@ -287,7 +297,7 @@ export default function ClassroomPage() {
 
         {/* Chat Pane */}
         <ResizablePanel defaultSize={50} minSize={30} className="flex flex-col bg-muted/10">
-          <ScrollArea className="flex-1 p-4">
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-20">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/20 mb-4">
@@ -357,8 +367,8 @@ export default function ClassroomPage() {
                 ))}
               </div>
             )}
-            <div ref={scrollRef} className="h-4" />
-          </ScrollArea>
+            <div ref={scrollRef} className="h-4 shrink-0" />
+          </div>
           
           <div className="p-3 bg-background border-t">
             <div className="flex gap-2">
