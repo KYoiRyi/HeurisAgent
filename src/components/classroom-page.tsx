@@ -1,15 +1,13 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   MessageSquareText, Send, Bot, User, BookOpen, Sparkles,
-  Lightbulb, ArrowRight, Loader2
+  Lightbulb, Loader2, FileText, RefreshCw
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
@@ -33,6 +31,17 @@ interface Message {
   liveComponent?: LiveComponent | null;
 }
 
+interface ClassroomResource {
+  id: string;
+  title: string;
+  subject: string;
+  category: string;
+  content: string | null;
+  file_url?: string | null;
+  tags?: string[];
+  difficulty?: string;
+}
+
 const SUBJECTS = ["数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理"];
 
 export default function ClassroomPage() {
@@ -42,7 +51,34 @@ export default function ClassroomPage() {
   const [subject, setSubject] = useState("数学");
   const [studentName, setStudentName] = useState("张三");
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [classroomResources, setClassroomResources] = useState<ClassroomResource[]>([]);
+  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const fetchClassroomResources = useCallback(async () => {
+    setResourcesLoading(true);
+    try {
+      const params = new URLSearchParams({ subject });
+      const res = await fetch(`/api/resources?${params}`);
+      const json = await res.json();
+      if (json.success) {
+        const docs = (json.data || []).filter((resource: ClassroomResource) =>
+          resource.category === "document" || resource.category === "note"
+        );
+        setClassroomResources(docs);
+        setSelectedResourceId((current) =>
+          docs.some((resource: ClassroomResource) => resource.id === current)
+            ? current
+            : docs[0]?.id ?? null
+        );
+      }
+    } catch (err) {
+      console.error("Fetch classroom resources error:", err);
+    } finally {
+      setResourcesLoading(false);
+    }
+  }, [subject]);
 
   // Load identity from localStorage
   useEffect(() => {
@@ -57,6 +93,10 @@ export default function ClassroomPage() {
     localStorage.setItem("heuris_subject", subject);
     localStorage.setItem("heuris_studentName", studentName);
   }, [subject, studentName]);
+
+  useEffect(() => {
+    fetchClassroomResources();
+  }, [fetchClassroomResources]);
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -84,9 +124,13 @@ export default function ClassroomPage() {
         return json.data.id;
       }
     } catch (err) {
-      console.error("Create session error:", err);
+      console.error("Create session error, falling back to local session:", err);
     }
-    return null;
+
+    // Fallback to local session ID if DB insert fails (e.g., Supabase not configured)
+    const fallbackId = "local-" + Date.now().toString();
+    setSessionId(fallbackId);
+    return fallbackId;
   };
 
   const handleSend = async () => {
@@ -166,6 +210,10 @@ export default function ClassroomPage() {
               }
               if (data.done) {
                 setIsStreaming(false);
+                void fetchClassroomResources();
+              }
+              if (data.resourceSaved) {
+                void fetchClassroomResources();
               }
               if (data.error) {
                 fullContent += `\n\n[错误: ${data.error}]`;
@@ -203,6 +251,7 @@ export default function ClassroomPage() {
   ];
 
   const activeComponent = [...messages].reverse().find(m => m.liveComponent)?.liveComponent;
+  const selectedResource = classroomResources.find((resource) => resource.id === selectedResourceId) ?? null;
 
   return (
     <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col">
@@ -254,6 +303,45 @@ export default function ClassroomPage() {
             <Bot className="h-4 w-4 mr-2 text-emerald-500" />
             <span className="text-sm font-semibold">互动黑板 (Stage)</span>
           </div>
+          <div className="border-b bg-background/80 px-3 py-2 shrink-0">
+            <div className="flex items-center gap-2">
+              <FileText className="h-3.5 w-3.5 text-cyan-500" />
+              <span className="text-xs font-semibold">课堂资料</span>
+              <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                {classroomResources.length}
+              </Badge>
+              <button
+                onClick={fetchClassroomResources}
+                disabled={resourcesLoading}
+                className="ml-auto p-1 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                aria-label="刷新课堂资料"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${resourcesLoading ? "animate-spin" : ""}`} />
+              </button>
+            </div>
+            <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+              {resourcesLoading && classroomResources.length === 0 ? (
+                <span className="text-[11px] text-muted-foreground">正在加载资料...</span>
+              ) : classroomResources.length > 0 ? (
+                classroomResources.map((resource) => (
+                  <button
+                    key={resource.id}
+                    onClick={() => setSelectedResourceId(resource.id)}
+                    className={`max-w-[12rem] shrink-0 truncate rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                      selectedResourceId === resource.id
+                        ? "border-cyan-500/60 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
+                        : "border-border text-muted-foreground hover:border-cyan-500/40 hover:text-foreground"
+                    }`}
+                    title={resource.title}
+                  >
+                    {resource.title}
+                  </button>
+                ))
+              ) : (
+                <span className="text-[11px] text-muted-foreground">暂无可展示的文档或笔记</span>
+              )}
+            </div>
+          </div>
           <div className="flex-1 relative overflow-hidden flex items-center justify-center p-4 bg-dot-pattern">
             {activeComponent ? (
               <div className="w-full h-full rounded-xl overflow-hidden border shadow-sm flex flex-col bg-white">
@@ -282,6 +370,46 @@ export default function ClassroomPage() {
                   `}
                   sandbox="allow-scripts allow-same-origin"
                 />
+              </div>
+            ) : selectedResource ? (
+              <div className="h-full w-full overflow-hidden rounded-lg border bg-background shadow-sm flex flex-col">
+                <div className="border-b bg-muted/40 px-4 py-3 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-cyan-500" />
+                    <h2 className="text-sm font-semibold truncate">{selectedResource.title}</h2>
+                    <Badge variant="secondary" className="ml-auto text-[10px]">
+                      {selectedResource.category === "note" ? "学习笔记" : "文档资料"}
+                    </Badge>
+                  </div>
+                  {selectedResource.tags && selectedResource.tags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {selectedResource.tags.slice(0, 5).map((tag) => (
+                        <Badge key={tag} variant="outline" className="h-4 px-1 text-[9px]">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 overflow-y-auto p-5 prose prose-sm dark:prose-invert max-w-none">
+                  {selectedResource.content ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {selectedResource.content}
+                    </ReactMarkdown>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">该资料暂未填写正文内容。</p>
+                  )}
+                  {selectedResource.file_url && (
+                    <a
+                      href={selectedResource.file_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs"
+                    >
+                      打开关联文件
+                    </a>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="text-center text-muted-foreground opacity-50">

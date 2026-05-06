@@ -5,10 +5,10 @@ import type { AgentEvent as PiAgentEvent } from "@/lib/pi-agent/types";
 import { buildClassroomTools } from "@/lib/heuris-agent";
 import { loadSkills, formatSkillsForPrompt } from "@/lib/pi-agent/skills";
 import path from "path";
-import type { UserMessage, AssistantMessage as PiAssistantMessage } from "@/lib/pi-ai/index";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
 import { sessionManager } from "@/lib/pi-agent/session-manager";
 import { memoryStore } from "@/lib/memory";
+import { resourceStore } from "@/lib/resources";
 
 const CLASSROOM_SYSTEM_PROMPT = `你是一个专业的课堂互动智能体，擅长实时提问解答和知识点联动讲解。
 
@@ -27,8 +27,7 @@ const CLASSROOM_SYSTEM_PROMPT = `你是一个专业的课堂互动智能体，�
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, sessionId, subject, studentName, history } =
-      await request.json();
+    const { message, sessionId, subject, studentName } = await request.json();
 
     if (!message) {
       return NextResponse.json({ error: "消息内容不能为空" }, { status: 400 });
@@ -57,30 +56,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 获取相关教学资源
+    // 获取相关教学资源，Supabase 不可用时回退到本地 SQLite 资源库
     let resourceContext = "";
-    if (client && subject) {
-      const { data: resources } = await client
-        .from("learning_resources")
-        .select("title, content, tags")
-        .eq("subject", subject)
-        .eq("is_shared", true)
-        .limit(3);
-
-      if (resources && resources.length > 0) {
-        resourceContext =
-          "\n\n相关教学资源参考：\n" +
-          resources
-            .map(
-              (r: { title: string; content: string | null }, i: number) =>
-                `${i + 1}. ${r.title}${r.content ? `：${r.content.substring(0, 200)}` : ""}`
-            )
-            .join("\n");
-      }
+    const resources = await loadClassroomResources(client, subject);
+    if (resources.length > 0) {
+      resourceContext =
+        "\n\n相关教学资源参考：\n" +
+        resources
+          .map(
+            (r, i) =>
+              `${i + 1}. ${r.title}${r.content ? `：${r.content.substring(0, 360)}` : ""}`
+          )
+          .join("\n");
     }
 
     // Auto-inject memory context for this student
-    const memoryContext = memoryStore.buildContext(studentName, 10);
+    const memoryContext = memoryStore.buildContextFromQueries([studentName, subject, message], 10);
 
     // Load agent skills
     const skillsDir = path.join(process.cwd(), "data", "skills");
@@ -96,18 +87,18 @@ export async function POST(request: NextRequest) {
       `${sessionContext}${resourceContext}\n\n学科：${subject || "通用"}，学生：${studentName || "同学"}\n\nIf you need to show an interactive simulation, diagram, or applet, you MUST call the render_live_component tool! Do NOT write markdown code blocks for interactive apps.`;
 
     // Load agent history from stateful session manager
-    let piMessages = sessionId ? sessionManager.load(sessionId) : [];
+    const piMessages = sessionId ? sessionManager.load(sessionId) : [];
 
     const model = getActiveModel();
     const apiKey = getActiveApiKey();
-    
+
     // Initialize the Agent
     const agent = new Agent({
       initialState: {
         systemPrompt,
         messages: piMessages,
         model,
-        tools: buildClassroomTools(),
+        tools: buildClassroomTools({ studentName, sessionId, subject }),
       },
       getApiKey: () => apiKey,
       toolExecution: "parallel",
@@ -176,13 +167,18 @@ export async function POST(request: NextRequest) {
                     details: { error: event.result },
                   }).then();
                 }
+              } else if (event.toolName === "save_learning_resource") {
+                sendEvent({
+                  content: "\n\n*[系统：课堂资料已保存并同步到资源库]*",
+                  resourceSaved: event.result?.details ?? null,
+                });
               }
             }
           });
 
           // Run the agent loop by prompting it with the user message
           await agent.prompt(message);
-          
+
           if (isThinking) {
              sendEvent({ content: "\n</think>\n" });
           }
@@ -193,6 +189,10 @@ export async function POST(request: NextRequest) {
           }
 
           // Background decoupled save
+          if (!finalError) {
+            memoryStore.syncTurn(message, fullContent, sessionId, { studentName, subject });
+          }
+
           if (client) {
             saveClassroomRecords(
               client, sessionId, studentName, message,
@@ -239,6 +239,40 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : "服务器错误";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+interface ClassroomResourceContext {
+  title: string;
+  content: string | null;
+}
+
+async function loadClassroomResources(
+  client: ReturnType<typeof getSupabaseClient>,
+  subject: string | undefined
+): Promise<ClassroomResourceContext[]> {
+  const localResources = resourceStore.list({ subject, limit: 5 });
+  if (!client || !subject) return localResources;
+
+  const { data, error } = await client
+    .from("learning_resources")
+    .select("title, content, tags, category")
+    .eq("subject", subject)
+    .eq("is_shared", true)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  if (error) {
+    console.warn("[classroom] Supabase resource lookup failed, using local resources:", error.message);
+    return localResources;
+  }
+
+  return [
+    ...(data || []).map((resource: { title: string; content: string | null }) => ({
+      title: resource.title,
+      content: resource.content,
+    })),
+    ...localResources,
+  ].slice(0, 5);
 }
 
 async function saveClassroomRecords(

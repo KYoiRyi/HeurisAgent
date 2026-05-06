@@ -102,6 +102,28 @@ export function getDb(): Database.Database {
       created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
       updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- ── Local learning resources fallback ───────────────────────────────────
+    -- Mirrors the Supabase learning_resources shape so classroom docs still
+    -- work when Supabase is not configured or temporarily unavailable.
+    CREATE TABLE IF NOT EXISTS learning_resources (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      title       TEXT    NOT NULL,
+      subject     TEXT    NOT NULL,
+      category    TEXT    NOT NULL DEFAULT 'document',
+      content     TEXT,
+      file_url    TEXT,
+      tags        TEXT    NOT NULL DEFAULT '[]',
+      difficulty  TEXT    NOT NULL DEFAULT 'medium',
+      created_by  TEXT    NOT NULL DEFAULT 'system',
+      is_shared   INTEGER NOT NULL DEFAULT 1,
+      created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS learning_resources_subject_idx ON learning_resources(subject);
+    CREATE INDEX IF NOT EXISTS learning_resources_category_idx ON learning_resources(category);
+    CREATE INDEX IF NOT EXISTS learning_resources_created_idx ON learning_resources(created_at DESC);
   `);
 
   return _db;

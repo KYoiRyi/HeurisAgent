@@ -4,9 +4,9 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Brain, Search, Plus, Trash2, Pin, Star, Tag,
   Clock, BookOpen, MessageSquare, RefreshCw, Loader2,
-  Filter, X, Sparkles, AlertCircle
+  X, Sparkles, AlertCircle
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +30,10 @@ const SOURCE_META: Record<string, { label: string; color: string; icon: typeof B
   review:    { label: "复习", color: "bg-purple-500/10 text-purple-600 dark:text-purple-400", icon: Clock },
   cron:      { label: "任务", color: "bg-blue-500/10 text-blue-600 dark:text-blue-400", icon: Sparkles },
   auto:      { label: "自动", color: "bg-pink-500/10 text-pink-600 dark:text-pink-400", icon: Sparkles },
+  agent_tool: { label: "智能体", color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400", icon: Sparkles },
 };
+
+const SOURCE_FILTERS = ["", "manual", "classroom", "error", "review", "cron", "auto", "agent_tool"];
 
 export default function MemoryPage() {
   const [memories, setMemories] = useState<Memory[]>([]);
@@ -43,19 +46,26 @@ export default function MemoryPage() {
   const [newTags, setNewTags] = useState("");
   const [newImportance, setNewImportance] = useState<1 | 2 | 3>(1);
   const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams({ limit: "100" });
       if (query) params.set("q", query);
       if (sourceFilter) params.set("source", sourceFilter);
       const res = await fetch(`/api/memory?${params}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success) {
         setMemories(json.data);
         setTotal(json.total);
+      } else {
+        setError(json.error || "记忆读取失败");
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "记忆读取失败");
     } finally {
       setLoading(false);
     }
@@ -64,11 +74,19 @@ export default function MemoryPage() {
   useEffect(() => { load(); }, [load]);
 
   const handleDelete = async (id: number) => {
-    await fetch("/api/memory", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    setMemories((m) => m.filter((x) => x.id !== id));
+    setError(null);
+    const res = await fetch("/api/memory", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    const json = await res.json();
+    if (json.success) {
+      setMemories((m) => m.filter((x) => x.id !== id));
+      setTotal((t) => Math.max(0, t - 1));
+    } else {
+      setError(json.error || "记忆删除失败");
+    }
   };
 
   const handlePin = async (mem: Memory) => {
+    setError(null);
     const res = await fetch("/api/memory", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -76,11 +94,13 @@ export default function MemoryPage() {
     });
     const json = await res.json();
     if (json.success) setMemories((m) => m.map((x) => x.id === mem.id ? json.data : x));
+    else setError(json.error || "记忆更新失败");
   };
 
   const handleAdd = async () => {
     if (!newContent.trim()) return;
     setAdding(true);
+    setError(null);
     try {
       const tags = newTags.split(/[,，\s]+/).filter(Boolean);
       const res = await fetch("/api/memory", {
@@ -93,7 +113,11 @@ export default function MemoryPage() {
         setMemories((m) => [json.data, ...m]);
         setNewContent(""); setNewTags(""); setNewImportance(1); setShowAdd(false);
         setTotal((t) => t + 1);
+      } else {
+        setError(json.error || "记忆保存失败");
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "记忆保存失败");
     } finally {
       setAdding(false);
     }
@@ -180,7 +204,7 @@ export default function MemoryPage() {
           />
         </div>
         <div className="flex gap-1">
-          {["", "manual", "classroom", "error", "cron", "auto"].map((src) => (
+          {SOURCE_FILTERS.map((src) => (
             <button
               key={src || "all"}
               onClick={() => setSourceFilter(src)}
@@ -191,6 +215,15 @@ export default function MemoryPage() {
           ))}
         </div>
       </div>
+
+      {error && (
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardContent className="p-3 text-sm text-destructive flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {error}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Pinned section */}
       {pinned.length > 0 && (

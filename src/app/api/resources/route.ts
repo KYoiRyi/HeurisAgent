@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
+import { resourceStore } from "@/lib/resources";
 
 // 创建教学资源
 export async function POST(request: NextRequest) {
@@ -13,7 +14,18 @@ export async function POST(request: NextRequest) {
 
     const client = getSupabaseClient();
     if (!client) {
-      return NextResponse.json({ error: "数据库未配置" }, { status: 503 });
+      const data = resourceStore.add({
+        title,
+        subject,
+        category,
+        content: content || null,
+        file_url: fileUrl || null,
+        tags: normalizeTags(tags),
+        difficulty: difficulty || "medium",
+        created_by: createdBy || "system",
+      });
+
+      return NextResponse.json({ success: true, data, storage: "local" });
     }
 
     const { data, error } = await client
@@ -24,14 +36,32 @@ export async function POST(request: NextRequest) {
         category,
         content: content || null,
         file_url: fileUrl || null,
-        tags: tags || [],
+        tags: normalizeTags(tags),
         difficulty: difficulty || "medium",
         created_by: createdBy || "system",
         is_shared: true,
       })
       .select();
 
-    if (error) throw new Error(`创建资源失败: ${error.message}`);
+    if (error) {
+      const localData = resourceStore.add({
+        title,
+        subject,
+        category,
+        content: content || null,
+        file_url: fileUrl || null,
+        tags: normalizeTags(tags),
+        difficulty: difficulty || "medium",
+        created_by: createdBy || "system",
+      });
+
+      return NextResponse.json({
+        success: true,
+        data: localData,
+        storage: "local",
+        warning: `Supabase 写入失败，已保存到本地资源库：${error.message}`,
+      });
+    }
 
     // 记录学习行为
     await client.from("learning_records").insert({
@@ -54,13 +84,16 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    if (!client) {
-      return NextResponse.json({ success: true, data: [] });
-    }
     const { searchParams } = new URL(request.url);
     const subject = searchParams.get("subject");
     const category = searchParams.get("category");
     const difficulty = searchParams.get("difficulty");
+
+    const localResources = resourceStore.list({ subject, category, difficulty, limit: 50 });
+
+    if (!client) {
+      return NextResponse.json({ success: true, data: localResources, storage: "local" });
+    }
 
     let query = client
       .from("learning_resources")
@@ -74,11 +107,23 @@ export async function GET(request: NextRequest) {
     if (difficulty) query = query.eq("difficulty", difficulty);
 
     const { data, error } = await query;
-    if (error) throw new Error(`查询失败: ${error.message}`);
+    if (error) {
+      return NextResponse.json({
+        success: true,
+        data: localResources,
+        storage: "local",
+        warning: `Supabase 查询失败，已显示本地资源库：${error.message}`,
+      });
+    }
 
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data: [...(data || []), ...localResources] });
   } catch (error) {
     const message = error instanceof Error ? error.message : "服务器错误";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+function normalizeTags(tags: unknown): string[] {
+  if (!Array.isArray(tags)) return [];
+  return tags.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0);
 }

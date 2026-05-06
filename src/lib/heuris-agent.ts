@@ -18,6 +18,7 @@ import type { AssistantMessage } from "@/lib/pi-ai/index";
 import { getActiveModel, getActiveApiKey } from "./model-config";
 import { getDb } from "./db";
 import { memoryStore } from "./memory";
+import { resourceStore } from "./resources";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
 
 // ── Event bus for SSE clients ────────────────────────────────────────────────
@@ -172,22 +173,35 @@ const RenderLiveComponentSchema = Type.Object({
   description: Type.String({ description: "A brief description of what this component is" }),
 });
 
-export function buildClassroomTools(): AgentTool[] {
+interface ClassroomToolContext {
+  studentName?: string;
+  sessionId?: string;
+  subject?: string;
+}
+
+export function buildClassroomTools(context: ClassroomToolContext = {}): AgentTool[] {
   const addMemoryTool: AgentTool<typeof AddMemorySchema> = {
     name: "add_memory",
     label: "Add Memory",
     description: "Save important long-term facts or context.",
     parameters: AddMemorySchema,
     execute: async (_id, params: Static<typeof AddMemorySchema>) => {
-      memoryStore.add(params.content, {
+      const studentPrefix = context.studentName ? `学生${context.studentName}：` : "";
+      const savedContent = `${studentPrefix}${params.content}`;
+      memoryStore.add(savedContent, {
         source: "classroom",
         importance: 2,
-        tags: params.tags ?? [],
+        session_id: context.sessionId,
+        tags: [
+          ...(params.tags ?? []),
+          ...(context.studentName ? [`student:${context.studentName}`] : []),
+          ...(context.subject ? [`subject:${context.subject}`] : []),
+        ],
       });
-      console.log(`[Classroom] add_memory: ${params.content.substring(0, 80)}`);
+      console.log(`[Classroom] add_memory: ${savedContent.substring(0, 80)}`);
       return {
         content: [{ type: "text", text: "Memory saved successfully." }],
-        details: { saved: true, content: params.content },
+        details: { saved: true, content: savedContent },
       };
     },
   };
@@ -240,10 +254,7 @@ export function buildClassroomTools(): AgentTool[] {
     execute: async (_id, params: Static<typeof SaveResourceSchema>) => {
       const client = getSupabaseClient();
       if (!client) {
-         return { content: [{ type: "text", text: "Database client unavailable." }], details: { error: true } };
-      }
-      try {
-        await client.from("learning_resources").insert({
+        const resource = resourceStore.add({
           title: params.title,
           content: params.content,
           subject: params.subject,
@@ -251,13 +262,39 @@ export function buildClassroomTools(): AgentTool[] {
           tags: params.tags,
           created_by: "classroom_agent",
         });
+        return {
+          content: [{ type: "text", text: `Saved learning resource locally: ${params.title}` }],
+          details: { ...resource, saved: true },
+        };
+      }
+      try {
+        const { data, error } = await client.from("learning_resources").insert({
+          title: params.title,
+          content: params.content,
+          subject: params.subject,
+          category: "note",
+          tags: params.tags,
+          created_by: "classroom_agent",
+        }).select();
+        if (error) throw new Error(error.message);
         console.log(`[Classroom] Saved resource: ${params.title}`);
         return {
           content: [{ type: "text", text: `Successfully saved learning resource: ${params.title}` }],
-          details: params,
+          details: { ...(data?.[0] ?? params), saved: true },
         };
       } catch (err) {
-        return { content: [{ type: "text", text: `Failed to save resource: ${String(err)}` }], details: { error: err } };
+        const resource = resourceStore.add({
+          title: params.title,
+          content: params.content,
+          subject: params.subject,
+          category: "note",
+          tags: params.tags,
+          created_by: "classroom_agent",
+        });
+        return {
+          content: [{ type: "text", text: `Saved learning resource locally after database error: ${params.title}` }],
+          details: { ...resource, saved: true, warning: String(err) },
+        };
       }
     },
   };
