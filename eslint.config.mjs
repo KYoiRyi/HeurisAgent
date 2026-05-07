@@ -46,6 +46,9 @@ const eslintConfig = defineConfig([
     'dist/**',
     // Script files (CommonJS):
     'scripts/**/*.js',
+    // Vendor:
+    'src/lib/pi-ai/**',
+    'src/lib/pi-agent/**',
   ]),
 ]);
 

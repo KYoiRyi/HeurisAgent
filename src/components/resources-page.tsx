@@ -5,7 +5,7 @@ import {
   FolderOpen, Plus, Search, FileText, Video, BookOpen, PenTool,
   Loader2, RefreshCw, Tag, Upload
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";

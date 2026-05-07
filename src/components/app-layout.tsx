@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, MessageSquareText, BookX, CalendarClock,
-  FolderOpen, Activity, Bot, Menu, X, GraduationCap,
+  FolderOpen, Bot, Menu, X, GraduationCap,
   ChevronRight, Sparkles, Settings, Brain
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,6 @@ const navItems = [
   { href: "/review", label: "复习策略", icon: CalendarClock, color: "text-purple-500", agent: "复习智能体" },
   { href: "/resources", label: "教学资源", icon: FolderOpen, color: "text-cyan-500" },
   { href: "/memory", label: "记忆中心", icon: Brain, color: "text-pink-500" },
-  { href: "/monitor", label: "后台与监控", icon: Activity, color: "text-rose-500" },
   { href: "/settings", label: "AI 设置", icon: Settings, color: "text-slate-500" },
 ];
 
