@@ -3,7 +3,8 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   MessageSquareText, Send, Bot, User, Sparkles,
-  Lightbulb, Loader2, FileText, RefreshCw, Wrench, CheckCircle2, XCircle, Terminal
+  Lightbulb, Loader2, FileText, RefreshCw, Wrench, CheckCircle2, XCircle, Terminal,
+  ChevronLeft, ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -336,6 +337,7 @@ export default function ClassroomPage() {
   const [exerciseProcesses, setExerciseProcesses] = useState<Record<string, string>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const stageEventsRef = useRef<StageEvent[]>([]);
+  const tabsScrollRef = useRef<HTMLDivElement>(null);
 
   const fetchClassroomResources = useCallback(async () => {
     setResourcesLoading(true);
@@ -350,11 +352,12 @@ export default function ClassroomPage() {
           resource.category === "exercise"
         );
         setClassroomResources(docs);
-        setSelectedResourceId((current) =>
-          docs.some((resource: ClassroomResource) => resource.id === current)
+        setSelectedResourceId((current) => {
+          if (current === "interactive-stage") return current;
+          return docs.some((resource: ClassroomResource) => resource.id === current)
             ? current
-            : docs[0]?.id ?? null
-        );
+            : docs[0]?.id ?? null;
+        });
       }
     } catch (err) {
       console.error("Fetch classroom resources error:", err);
@@ -717,52 +720,72 @@ export default function ClassroomPage() {
                 <RefreshCw className={`h-3.5 w-3.5 ${resourcesLoading ? "animate-spin" : ""}`} />
               </button>
             </div>
-            <div className="mt-2 flex flex-nowrap gap-1.5 overflow-x-auto pb-1 w-full">
-              {activeComponent && (
-                <button
-                  onClick={() => setSelectedResourceId("interactive-stage")}
-                  className={`max-w-[12rem] shrink-0 truncate rounded-md border px-2 py-1 text-[11px] transition-colors ${
-                    selectedResourceId === "interactive-stage"
-                      ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                      : "border-border text-muted-foreground hover:border-emerald-500/40 hover:text-foreground"
-                  }`}
-                  title="互动黑板"
-                >
-                  <Bot className="inline-block h-3 w-3 mr-1" />
-                  互动黑板
-                </button>
-              )}
-              {resourcesLoading && classroomResources.length === 0 ? (
-                <span className="text-[11px] text-muted-foreground">正在加载资料...</span>
-              ) : classroomResources.length > 0 ? (
-                classroomResources.map((resource) => (
+            <div className="mt-2 flex items-center gap-1">
+              <button
+                className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                aria-label="向左滚动"
+                onClick={() => { if (tabsScrollRef.current) tabsScrollRef.current.scrollLeft -= 160; }}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <div
+                ref={tabsScrollRef}
+                className="flex flex-1 flex-nowrap gap-1.5 overflow-x-auto pb-1"
+                style={{ scrollBehavior: "smooth", scrollbarWidth: "none" }}
+              >
+                {activeComponent && (
                   <button
-                    key={resource.id}
-                    onClick={() => setSelectedResourceId(resource.id)}
+                    onClick={() => setSelectedResourceId("interactive-stage")}
                     className={`max-w-[12rem] shrink-0 truncate rounded-md border px-2 py-1 text-[11px] transition-colors ${
-                      selectedResourceId === resource.id
-                        ? "border-cyan-500/60 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
-                        : "border-border text-muted-foreground hover:border-cyan-500/40 hover:text-foreground"
+                      selectedResourceId === "interactive-stage"
+                        ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                        : "border-border text-muted-foreground hover:border-emerald-500/40 hover:text-foreground"
                     }`}
-                    title={resource.title}
+                    title="互动黑板"
                   >
-                    {resource.title}
+                    <Bot className="inline-block h-3 w-3 mr-1" />
+                    互动黑板
                   </button>
-                ))
-              ) : (
-                <span className="text-[11px] text-muted-foreground">暂无可展示的文档或笔记</span>
-              )}
+                )}
+                {resourcesLoading && classroomResources.length === 0 ? (
+                  <span className="text-[11px] text-muted-foreground">正在加载资料...</span>
+                ) : classroomResources.length > 0 ? (
+                  classroomResources.map((resource) => (
+                    <button
+                      key={resource.id}
+                      onClick={() => setSelectedResourceId(resource.id)}
+                      className={`max-w-[12rem] shrink-0 truncate rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                        selectedResourceId === resource.id
+                          ? "border-cyan-500/60 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
+                          : "border-border text-muted-foreground hover:border-cyan-500/40 hover:text-foreground"
+                      }`}
+                      title={resource.title}
+                    >
+                      {resource.title}
+                    </button>
+                  ))
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">暂无可展示的文档或笔记</span>
+                )}
+              </div>
+              <button
+                className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                aria-label="向右滚动"
+                onClick={() => { if (tabsScrollRef.current) tabsScrollRef.current.scrollLeft += 160; }}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
           </div>
-          <div className="flex-1 relative overflow-hidden flex items-center justify-center p-4 bg-dot-pattern">
+          <div className="flex-1 relative overflow-hidden bg-dot-pattern">
             {selectedResourceId === "interactive-stage" && activeComponent ? (
-              <div className="w-full h-full rounded-xl overflow-hidden border flex flex-col bg-white">
-                <div className="px-4 py-2 bg-muted border-b text-xs text-muted-foreground flex items-center">
+              <div className="absolute inset-0 flex flex-col bg-white overflow-hidden">
+                <div className="px-4 py-2 bg-muted border-b text-xs text-muted-foreground flex items-center shrink-0">
                   <Lightbulb className="h-3 w-3 mr-1" />
                   {activeComponent.description}
                 </div>
-                <iframe 
-                  className="flex-1 w-full border-0"
+                <iframe
+                  className="flex-1 w-full border-0 min-h-0"
                   srcDoc={buildStageSrcDoc(activeComponent)}
                   sandbox="allow-scripts allow-same-origin"
                 />
@@ -787,7 +810,7 @@ export default function ClassroomPage() {
                 )}
               </div>
             ) : selectedResource ? (
-              <div className="h-full w-full overflow-hidden rounded-xl border bg-background flex flex-col">
+              <div className="absolute inset-0 flex flex-col bg-background overflow-hidden">
                 <div className="border-b bg-muted px-4 py-3 shrink-0">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-cyan-500" />
@@ -812,62 +835,92 @@ export default function ClassroomPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex-1 overflow-y-auto p-5 prose prose-sm dark:prose-invert max-w-none">
-                  {selectedResource.content ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {selectedResource.content}
-                    </ReactMarkdown>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">该资料暂未填写正文内容。</p>
-                  )}
-                  {selectedResource.category === "exercise" && (
-                    <div className="mt-6 border-t pt-4 not-prose">
-                      <h3 className="text-sm font-semibold mb-3">提交作答</h3>
-                      <div className="space-y-3">
-                        <div>
-                          <label className="text-xs text-muted-foreground mb-1 block">我的答案：</label>
+                {selectedResource.category === "exercise" ? (
+                  /* exercise: question above, answer form below */
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    <div className="overflow-y-auto p-5 border-b prose prose-sm dark:prose-invert max-w-none flex-none" style={{ maxHeight: "55%" }}>
+                      {selectedResource.content ? (
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedResource.content}</ReactMarkdown>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">题目内容加载中...</p>
+                      )}
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 not-prose bg-muted/20">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-amber-500" />
+                        <span className="text-sm font-semibold">答题区</span>
+                        <Badge variant="outline" className="text-[10px]">答完后提交，AI 自动批改并录入错题本</Badge>
+                      </div>
+                      {/^[A-D][.。]\s/m.test(selectedResource.content ?? "") ? (
+                        <div className="space-y-2">
+                          <label className="text-xs text-muted-foreground block">选择答案：</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {["A", "B", "C", "D"].map((opt) => (
+                              <button
+                                key={opt}
+                                onClick={() => setExerciseAnswers((prev) => ({ ...prev, [selectedResource.id]: opt }))}
+                                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors text-left ${
+                                  exerciseAnswers[selectedResource.id] === opt
+                                    ? "border-cyan-500 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
+                                    : "border-border hover:border-cyan-400 hover:bg-accent"
+                                }`}
+                              >{opt}</button>
+                            ))}
+                          </div>
+                          <label className="text-xs text-muted-foreground block mt-2">解题思路（可选）：</label>
+                          <textarea
+                            className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            placeholder="说说你为什么选这个选项..."
+                            value={exerciseProcesses[selectedResource.id] || ""}
+                            onChange={(e) => setExerciseProcesses((prev) => ({ ...prev, [selectedResource.id]: e.target.value }))}
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <label className="text-xs text-muted-foreground block">我的答案：</label>
                           <Input
                             placeholder="请输入最终答案..."
                             value={exerciseAnswers[selectedResource.id] || ""}
                             onChange={(e) => setExerciseAnswers((prev) => ({ ...prev, [selectedResource.id]: e.target.value }))}
                           />
-                        </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground mb-1 block">解题过程/思路：</label>
+                          <label className="text-xs text-muted-foreground block">解题过程/思路：</label>
                           <textarea
-                            className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                            placeholder="请简述解题过程..."
+                            className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            placeholder="请完整写出解题过程..."
                             value={exerciseProcesses[selectedResource.id] || ""}
                             onChange={(e) => setExerciseProcesses((prev) => ({ ...prev, [selectedResource.id]: e.target.value }))}
                           />
                         </div>
-                        <Button 
-                          className="w-full"
-                          onClick={() => {
-                            const ans = exerciseAnswers[selectedResource.id] || "";
-                            const proc = exerciseProcesses[selectedResource.id] || "";
-                            if (!ans && !proc) return;
-                            handleSend(`提交题目《${selectedResource.title}》的解答：\n\n【我的答案】\n${ans}\n\n【解题过程/思路】\n${proc}\n\n请帮我批改。`);
-                          }}
-                          disabled={(!exerciseAnswers[selectedResource.id] && !exerciseProcesses[selectedResource.id]) || isStreaming}
-                        >
-                          <Send className="h-4 w-4 mr-2" />
-                          提交批改
-                        </Button>
-                      </div>
+                      )}
+                      <Button
+                        className="w-full"
+                        onClick={() => {
+                          const ans = exerciseAnswers[selectedResource.id] || "";
+                          const proc = exerciseProcesses[selectedResource.id] || "";
+                          if (!ans && !proc) return;
+                          handleSend(
+                            `[EXERCISE_SUBMISSION]\n\n题目：《${selectedResource.title}》\n\n题目内容：\n${selectedResource.content ?? ""}\n\n【我的答案】\n${ans}\n\n【解题过程/思路】\n${proc}\n\n请批改，并将结果录入错题本。`
+                          );
+                        }}
+                        disabled={(!exerciseAnswers[selectedResource.id] && !exerciseProcesses[selectedResource.id]) || isStreaming}
+                      >
+                        <Send className="h-4 w-4 mr-2" />
+                        提交批改（自动录入错题本）
+                      </Button>
                     </div>
-                  )}
-                  {selectedResource.file_url && (
-                    <a
-                      href={selectedResource.file_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs"
-                    >
-                      打开关联文件
-                    </a>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto p-5 prose prose-sm dark:prose-invert max-w-none">
+                    {selectedResource.content ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedResource.content}</ReactMarkdown>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">该资料暂未填写正文内容。</p>
+                    )}
+                    {selectedResource.file_url && (
+                      <a href={selectedResource.file_url} target="_blank" rel="noreferrer" className="text-xs">打开关联文件</a>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center text-muted-foreground opacity-50">
@@ -983,7 +1036,7 @@ export default function ClassroomPage() {
                 disabled={isStreaming}
                 className="flex-1"
               />
-              <Button onClick={handleSend} disabled={isStreaming || !inputValue.trim()}>
+              <Button onClick={() => void handleSend()} disabled={isStreaming || !inputValue.trim()}>
                 {isStreaming ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
