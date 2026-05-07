@@ -923,10 +923,10 @@ export default function ClassroomPage() {
                 {activeComponent && (
                   <button
                     onClick={() => setSelectedResourceId("interactive-stage")}
-                    className={`max-w-[12rem] shrink-0 truncate rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                    className={`max-w-[12rem] shrink-0 truncate rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                       selectedResourceId === "interactive-stage"
-                        ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                        : "border-border text-muted-foreground hover:border-emerald-500/40 hover:text-foreground"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                     }`}
                     title="互动黑板"
                   >
@@ -941,10 +941,10 @@ export default function ClassroomPage() {
                     <button
                       key={resource.id}
                       onClick={() => setSelectedResourceId(resource.id)}
-                      className={`max-w-[12rem] shrink-0 truncate rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                      className={`max-w-[12rem] shrink-0 truncate rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                         selectedResourceId === resource.id
-                          ? "border-cyan-500/60 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
-                          : "border-border text-muted-foreground hover:border-cyan-500/40 hover:text-foreground"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                       }`}
                       title={resource.title}
                     >
