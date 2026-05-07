@@ -1033,7 +1033,41 @@ export default function ClassroomPage() {
                           ? "bg-primary text-primary-foreground"
                           : "bg-background border prose prose-sm dark:prose-invert break-words"
                       }`}>
-                        {visibleContent ? (
+                        {msg.role === "student" && visibleContent.startsWith("[EXERCISE_SUBMISSION]") ? (
+                          /* ── Exercise submission card ── */
+                          (() => {
+                            const raw = visibleContent.replace("[EXERCISE_SUBMISSION]", "").trim();
+                            const titleMatch = raw.match(/题目：《(.+?)》/);
+                            const ansMatch = raw.match(/【我的答案】\n([\s\S]*?)(?=\n\n【|$)/);
+                            const procMatch = raw.match(/【解题过程\/思路】\n([\s\S]*?)(?=\n\n请批改|$)/);
+                            const title = titleMatch?.[1] ?? "练习题";
+                            const ans = ansMatch?.[1]?.trim() ?? "";
+                            const proc = procMatch?.[1]?.trim() ?? "";
+                            return (
+                              <div className="space-y-2 not-prose">
+                                <div className="flex items-center gap-1.5 text-primary-foreground/80 text-xs font-medium">
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  提交答题
+                                </div>
+                                <div className="bg-primary-foreground/10 rounded-xl px-3 py-2 space-y-1.5">
+                                  <p className="text-xs font-semibold text-primary-foreground/90 truncate">《{title}》</p>
+                                  {ans && (
+                                    <div className="flex items-start gap-1.5">
+                                      <span className="text-xs text-primary-foreground/60 shrink-0 mt-0.5">答案</span>
+                                      <span className="text-sm font-medium text-primary-foreground">{ans}</span>
+                                    </div>
+                                  )}
+                                  {proc && (
+                                    <div className="flex items-start gap-1.5">
+                                      <span className="text-xs text-primary-foreground/60 shrink-0 mt-0.5">思路</span>
+                                      <span className="text-xs text-primary-foreground/85 line-clamp-3">{proc}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()
+                        ) : visibleContent ? (
                           msg.role === "student" ? (
                             visibleContent
                           ) : (
