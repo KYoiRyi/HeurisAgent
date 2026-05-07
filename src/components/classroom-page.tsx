@@ -332,6 +332,8 @@ export default function ClassroomPage() {
   const [statusHints, setStatusHints] = useState<string[]>([]);
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
   const [showLogs, setShowLogs] = useState(true);
+  const [exerciseAnswers, setExerciseAnswers] = useState<Record<string, string>>({});
+  const [exerciseProcesses, setExerciseProcesses] = useState<Record<string, string>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const stageEventsRef = useRef<StageEvent[]>([]);
 
@@ -344,7 +346,8 @@ export default function ClassroomPage() {
         const docs = (json.data || []).filter((resource: ClassroomResource) =>
           resource.category === "document" ||
           resource.category === "note" ||
-          resource.category === "knowledge-point"
+          resource.category === "knowledge-point" ||
+          resource.category === "exercise"
         );
         setClassroomResources(docs);
         setSelectedResourceId((current) =>
@@ -445,8 +448,18 @@ export default function ClassroomPage() {
   const activeComponent = [...messages].reverse().find(m => m.liveComponent)?.liveComponent;
   const selectedResource = classroomResources.find((resource) => resource.id === selectedResourceId) ?? null;
 
-  const handleSend = async () => {
-    if (!inputValue.trim() || isStreaming) return;
+  const previousActiveComponentRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (activeComponent && activeComponent.html !== previousActiveComponentRef.current) {
+      setSelectedResourceId("interactive-stage");
+      previousActiveComponentRef.current = activeComponent.html;
+    }
+  }, [activeComponent]);
+
+  const handleSend = async (overrideMessage?: string) => {
+    if (!inputValue.trim() && typeof overrideMessage !== "string") return;
+    if (isStreaming) return;
 
     let activeSessionId = sessionId;
     if (!activeSessionId) {
@@ -460,13 +473,13 @@ export default function ClassroomPage() {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "student",
-      content: inputValue.trim(),
+      content: typeof overrideMessage === "string" ? overrideMessage : inputValue.trim(),
       timestamp: new Date(),
       type: "question",
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setInputValue("");
+    if (typeof overrideMessage !== "string") setInputValue("");
     setIsStreaming(true);
     setStatusHints([]);
     setDebugLogs([
@@ -497,7 +510,7 @@ export default function ClassroomPage() {
           sessionId: activeSessionId,
           subject: selectedSubject,
           stageEvents: stageEventsRef.current.slice(-12),
-          activeStage: activeComponent
+          activeStage: selectedResourceId === "interactive-stage" && activeComponent
             ? { description: activeComponent.description }
             : selectedResource
               ? { description: `课堂资料：${selectedResource.title}` }
@@ -688,7 +701,7 @@ export default function ClassroomPage() {
             <Bot className="h-4 w-4 mr-2 text-emerald-500" />
             <span className="text-sm font-semibold">互动黑板</span>
           </div>
-          <div className="border-b bg-background/80 px-3 py-2 shrink-0">
+          <div className="border-b bg-background/80 px-3 py-2 shrink-0 min-w-0 w-full overflow-hidden">
             <div className="flex items-center gap-2">
               <FileText className="h-3.5 w-3.5 text-cyan-500" />
               <span className="text-xs font-semibold">课堂资料</span>
@@ -704,7 +717,21 @@ export default function ClassroomPage() {
                 <RefreshCw className={`h-3.5 w-3.5 ${resourcesLoading ? "animate-spin" : ""}`} />
               </button>
             </div>
-            <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+            <div className="mt-2 flex flex-nowrap gap-1.5 overflow-x-auto pb-1 w-full">
+              {activeComponent && (
+                <button
+                  onClick={() => setSelectedResourceId("interactive-stage")}
+                  className={`max-w-[12rem] shrink-0 truncate rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                    selectedResourceId === "interactive-stage"
+                      ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                      : "border-border text-muted-foreground hover:border-emerald-500/40 hover:text-foreground"
+                  }`}
+                  title="互动黑板"
+                >
+                  <Bot className="inline-block h-3 w-3 mr-1" />
+                  互动黑板
+                </button>
+              )}
               {resourcesLoading && classroomResources.length === 0 ? (
                 <span className="text-[11px] text-muted-foreground">正在加载资料...</span>
               ) : classroomResources.length > 0 ? (
@@ -728,7 +755,7 @@ export default function ClassroomPage() {
             </div>
           </div>
           <div className="flex-1 relative overflow-hidden flex items-center justify-center p-4 bg-dot-pattern">
-            {activeComponent ? (
+            {selectedResourceId === "interactive-stage" && activeComponent ? (
               <div className="w-full h-full rounded-xl overflow-hidden border flex flex-col bg-white">
                 <div className="px-4 py-2 bg-muted border-b text-xs text-muted-foreground flex items-center">
                   <Lightbulb className="h-3 w-3 mr-1" />
@@ -768,9 +795,11 @@ export default function ClassroomPage() {
                     <Badge variant="secondary" className="ml-auto text-[10px]">
                       {selectedResource.category === "knowledge-point"
                         ? "知识点"
-                        : selectedResource.category === "note"
-                          ? "学习笔记"
-                          : "文档资料"}
+                        : selectedResource.category === "exercise"
+                          ? "课堂测验"
+                          : selectedResource.category === "note"
+                            ? "学习笔记"
+                            : "文档资料"}
                     </Badge>
                   </div>
                   {selectedResource.tags && selectedResource.tags.length > 0 && (
@@ -790,6 +819,43 @@ export default function ClassroomPage() {
                     </ReactMarkdown>
                   ) : (
                     <p className="text-sm text-muted-foreground">该资料暂未填写正文内容。</p>
+                  )}
+                  {selectedResource.category === "exercise" && (
+                    <div className="mt-6 border-t pt-4 not-prose">
+                      <h3 className="text-sm font-semibold mb-3">提交作答</h3>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">我的答案：</label>
+                          <Input
+                            placeholder="请输入最终答案..."
+                            value={exerciseAnswers[selectedResource.id] || ""}
+                            onChange={(e) => setExerciseAnswers((prev) => ({ ...prev, [selectedResource.id]: e.target.value }))}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">解题过程/思路：</label>
+                          <textarea
+                            className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                            placeholder="请简述解题过程..."
+                            value={exerciseProcesses[selectedResource.id] || ""}
+                            onChange={(e) => setExerciseProcesses((prev) => ({ ...prev, [selectedResource.id]: e.target.value }))}
+                          />
+                        </div>
+                        <Button 
+                          className="w-full"
+                          onClick={() => {
+                            const ans = exerciseAnswers[selectedResource.id] || "";
+                            const proc = exerciseProcesses[selectedResource.id] || "";
+                            if (!ans && !proc) return;
+                            handleSend(`提交题目《${selectedResource.title}》的解答：\n\n【我的答案】\n${ans}\n\n【解题过程/思路】\n${proc}\n\n请帮我批改。`);
+                          }}
+                          disabled={(!exerciseAnswers[selectedResource.id] && !exerciseProcesses[selectedResource.id]) || isStreaming}
+                        >
+                          <Send className="h-4 w-4 mr-2" />
+                          提交批改
+                        </Button>
+                      </div>
+                    </div>
                   )}
                   {selectedResource.file_url && (
                     <a

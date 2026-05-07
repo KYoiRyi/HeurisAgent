@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'EduAgentX',
-  description: 'EduAgentX',
+  title: '启发式学业智能体',
+  description: 'HeurisAgent',
 };
 
 export default function RootLayout({

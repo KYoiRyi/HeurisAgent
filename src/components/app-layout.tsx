@@ -46,7 +46,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex items-center gap-3">
           <GraduationCap className="h-8 w-8 text-primary animate-pulse" />
-          <span className="text-xl font-bold">EduAgentX</span>
+          <span className="text-xl font-bold">启发式学业智能体</span>
         </div>
       </div>
     );
@@ -69,7 +69,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
             {sidebarOpen && (
               <div className="flex flex-col">
-                <span className="text-base font-bold tracking-tight">EduAgentX</span>
+                <span className="text-base font-bold tracking-tight">启发式学业智能体</span>
               </div>
             )}
           </Link>
@@ -152,7 +152,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <GraduationCap className="h-4 w-4" />
             <ChevronRight className="h-3 w-3" />
             <span className="font-medium text-foreground">
-              EduAgentX
+              启发式学业智能体
             </span>
           </div>
           <div className="ml-auto flex items-center gap-3">

@@ -241,17 +241,19 @@ export function buildClassroomTools(context: ClassroomToolContext = {}): AgentTo
   // 1. Tool: save_learning_resource
   const SaveResourceSchema = Type.Object({
     title: Type.String(),
-    content: Type.String({ description: "Markdown structured content for the resource (PPT/Note)." }),
+    content: Type.String({ description: "Markdown structured content for the resource (PPT/Note/Exercise)." }),
     subject: Type.String(),
     tags: Type.Array(Type.String()),
+    category: Type.Optional(Type.String({ description: "Use 'knowledge-point' for facts/concepts, and 'exercise' for questions/tests." })),
   });
 
   const saveResourceTool: AgentTool<typeof SaveResourceSchema> = {
     name: "save_learning_resource",
     label: "Save Learning Resource",
-    description: "Save a structured knowledge-point resource to the class database. Only use it for concrete knowledge points, formulas, laws, concepts, methods, examples, or Stage experiment conclusions. Do not save ordinary chat transcripts or vague summaries.",
+    description: "Save a structured knowledge-point resource or an exercise/question to the class database. Use 'knowledge-point' for facts, concepts, conclusions. Use 'exercise' to issue a question or test to the student. Do not save ordinary chat transcripts.",
     parameters: SaveResourceSchema,
     execute: async (_id, params: Static<typeof SaveResourceSchema>) => {
+      const cat = params.category === "exercise" ? "exercise" : "knowledge-point";
       if (!isKnowledgeResource(params)) {
         return {
           content: [{ type: "text", text: "Skipped resource save: no concrete knowledge point was found." }],
@@ -264,8 +266,8 @@ export function buildClassroomTools(context: ClassroomToolContext = {}): AgentTo
           title: params.title,
           content: params.content,
           subject: params.subject,
-          category: "knowledge-point",
-          tags: ["knowledge-point", ...params.tags],
+          category: cat,
+          tags: [cat, ...params.tags],
           created_by: "classroom_agent",
         });
         return {
@@ -278,8 +280,8 @@ export function buildClassroomTools(context: ClassroomToolContext = {}): AgentTo
           title: params.title,
           content: params.content,
           subject: params.subject,
-          category: "knowledge-point",
-          tags: ["knowledge-point", ...params.tags],
+          category: cat,
+          tags: [cat, ...params.tags],
           created_by: "classroom_agent",
         }).select();
         if (error) throw new Error(error.message);
@@ -293,8 +295,8 @@ export function buildClassroomTools(context: ClassroomToolContext = {}): AgentTo
           title: params.title,
           content: params.content,
           subject: params.subject,
-          category: "knowledge-point",
-          tags: ["knowledge-point", ...params.tags],
+          category: cat,
+          tags: [cat, ...params.tags],
           created_by: "classroom_agent",
         });
         return {
@@ -358,9 +360,10 @@ export function buildClassroomTools(context: ClassroomToolContext = {}): AgentTo
   return [renderLiveComponent, searchMemoryTool, addMemoryTool, saveResourceTool, saveErrorTool];
 }
 
-function isKnowledgeResource(params: { title: string; content: string; tags: string[] }): boolean {
+function isKnowledgeResource(params: { title: string; content: string; tags: string[]; category?: string }): boolean {
+  if (params.category === "exercise") return true;
   const combined = `${params.title}\n${params.content}\n${params.tags.join(" ")}`;
-  return /知识点|概念|定律|公式|原理|规则|方法|模型|例题|实验|结论|误区|错因|法则|单位|性质|推导|knowledge|concept|formula|law|principle/i.test(combined);
+  return /知识点|概念|定律|公式|原理|规则|方法|模型|例题|实验|结论|误区|错因|法则|单位|性质|推导|题|练|考|knowledge|concept|formula|law|principle/i.test(combined);
 }
 
 function saveErrorQuestionMemory(
