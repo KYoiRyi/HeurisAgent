@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   MessageSquareText, Send, Bot, User, Sparkles,
   Lightbulb, Loader2, FileText, RefreshCw, Wrench, CheckCircle2, XCircle, Terminal,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, PlusCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -335,6 +335,8 @@ export default function ClassroomPage() {
   const [showLogs, setShowLogs] = useState(true);
   const [exerciseAnswers, setExerciseAnswers] = useState<Record<string, string>>({});
   const [exerciseProcesses, setExerciseProcesses] = useState<Record<string, string>>({});
+  const [newClassroomArmed, setNewClassroomArmed] = useState(false);
+  const newClassroomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stageEventsRef = useRef<StageEvent[]>([]);
   const tabsScrollRef = useRef<HTMLDivElement>(null);
@@ -446,6 +448,35 @@ export default function ClassroomPage() {
     const fallbackId = "local-" + Date.now().toString();
     setSessionId(fallbackId);
     return fallbackId;
+  };
+
+  const handleNewClassroom = () => {
+    if (!newClassroomArmed) {
+      // First click: arm the button, auto-disarm after 3s
+      setNewClassroomArmed(true);
+      if (newClassroomTimerRef.current) clearTimeout(newClassroomTimerRef.current);
+      newClassroomTimerRef.current = setTimeout(() => setNewClassroomArmed(false), 3000);
+      return;
+    }
+    // Second click within 3s: execute
+    if (newClassroomTimerRef.current) clearTimeout(newClassroomTimerRef.current);
+    setNewClassroomArmed(false);
+    // Reset all classroom state
+    setMessages([]);
+    setStageEvents([]);
+    stageEventsRef.current = [];
+    setStatusHints([]);
+    setDebugLogs([]);
+    setExerciseAnswers({});
+    setExerciseProcesses({});
+    setSelectedResourceId(null);
+    setInputValue("");
+    setIsStreaming(false);
+    // Generate a fresh session so the agent starts with clean context
+    const freshId = "local-" + Date.now().toString();
+    setSessionId(freshId);
+    // Reload resources for the fresh classroom
+    void fetchClassroomResources();
   };
 
   const activeComponent = [...messages].reverse().find(m => m.liveComponent)?.liveComponent;
@@ -671,6 +702,16 @@ export default function ClassroomPage() {
             onClick={() => setShowLogs((value) => !value)}
           >
             <Terminal className="h-3.5 w-3.5 mr-1" />日志
+          </Button>
+          <Button
+            size="sm"
+            variant={newClassroomArmed ? "destructive" : "outline"}
+            onClick={handleNewClassroom}
+            disabled={isStreaming}
+            title={newClassroomArmed ? "再次点击确认清空，开启全新课堂" : "清空聊天记录，开启新课堂"}
+          >
+            <PlusCircle className="h-3.5 w-3.5 mr-1" />
+            {newClassroomArmed ? "确认清空？" : "新课堂"}
           </Button>
           <Button
             size="sm"
