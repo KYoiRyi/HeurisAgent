@@ -15,6 +15,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
+import { Markdown } from "@/components/ui/markdown";
 
 interface ErrorQuestion {
   id: string;
@@ -281,7 +282,9 @@ export default function ErrorsPage() {
                     </div>
 
                     {/* Question */}
-                    <p className="text-sm font-medium">{error.question_text}</p>
+                    <div className="text-sm font-medium prose prose-sm dark:prose-invert max-w-none">
+                      <Markdown>{error.question_text}</Markdown>
+                    </div>
 
                     {/* Answers */}
                     {(error.student_answer || error.correct_answer) && (
@@ -289,13 +292,17 @@ export default function ErrorsPage() {
                         {error.student_answer && (
                           <div className="rounded-lg bg-red-50 dark:bg-red-950/20 p-2">
                             <p className="text-[10px] text-red-600 font-medium mb-0.5">学生答案</p>
-                            <p className="text-xs">{error.student_answer}</p>
+                            <div className="text-xs prose prose-sm dark:prose-invert max-w-none">
+                              <Markdown>{error.student_answer}</Markdown>
+                            </div>
                           </div>
                         )}
                         {error.correct_answer && (
                           <div className="rounded-lg bg-green-50 dark:bg-green-950/20 p-2">
                             <p className="text-[10px] text-green-600 font-medium mb-0.5">正确答案</p>
-                            <p className="text-xs">{error.correct_answer}</p>
+                            <div className="text-xs prose prose-sm dark:prose-invert max-w-none">
+                              <Markdown>{error.correct_answer}</Markdown>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -308,7 +315,9 @@ export default function ErrorsPage() {
                           <Brain className="h-3.5 w-3.5 text-blue-500" />
                           <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">AI 错因分析</span>
                         </div>
-                        <p className="text-xs text-blue-800 dark:text-blue-300 whitespace-pre-wrap">{error.error_analysis}</p>
+                        <div className="text-xs text-blue-800 dark:text-blue-300 prose prose-sm dark:prose-invert max-w-none">
+                          <Markdown>{error.error_analysis}</Markdown>
+                        </div>
                       </div>
                     )}
 
@@ -328,7 +337,9 @@ export default function ErrorsPage() {
                         <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 mb-1">
                           <Target className="h-3 w-3 inline mr-1" />强化建议
                         </p>
-                        <p className="text-xs text-amber-800 dark:text-amber-300">{error.reinforcement_suggestions}</p>
+                        <div className="text-xs text-amber-800 dark:text-amber-300 prose prose-sm dark:prose-invert max-w-none">
+                          <Markdown>{error.reinforcement_suggestions}</Markdown>
+                        </div>
                       </div>
                     )}
                   </div>

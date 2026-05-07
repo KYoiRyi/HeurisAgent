@@ -13,8 +13,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Markdown } from "@/components/ui/markdown";
 
 // ── Archived session (stored in localStorage) ────────────────────────────────
 interface ArchivedSession {
@@ -1028,7 +1027,7 @@ export default function ClassroomPage() {
                   <div className="flex-1 flex flex-col overflow-hidden">
                     <div className="overflow-y-auto p-5 border-b prose prose-sm dark:prose-invert max-w-none flex-none" style={{ maxHeight: "55%" }}>
                       {selectedResource.content ? (
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedResource.content}</ReactMarkdown>
+                        <Markdown>{selectedResource.content}</Markdown>
                       ) : (
                         <p className="text-sm text-muted-foreground">题目内容加载中...</p>
                       )}
@@ -1100,7 +1099,7 @@ export default function ClassroomPage() {
                 ) : (
                   <div className="flex-1 overflow-y-auto p-5 prose prose-sm dark:prose-invert max-w-none">
                     {selectedResource.content ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedResource.content}</ReactMarkdown>
+                      <Markdown>{selectedResource.content}</Markdown>
                     ) : (
                       <p className="text-sm text-muted-foreground">该资料暂未填写正文内容。</p>
                     )}
@@ -1219,9 +1218,7 @@ export default function ClassroomPage() {
                             visibleContent
                           ) : (
                             <div className="w-full space-y-4">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {visibleContent}
-                              </ReactMarkdown>
+                              <Markdown>{visibleContent}</Markdown>
                               {msg.liveComponent && (
                                 <Badge variant="secondary" className="mt-2 text-[10px]">
                                   <Sparkles className="h-3 w-3 mr-1" /> 已更新黑板演示

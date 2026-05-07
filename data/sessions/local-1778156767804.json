@@ -1,0 +1,154 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "请解释一下这个知识点的核心概念"
+      }
+    ],
+    "timestamp": 1778156771094
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "<think>\n用户要求解释\"这个知识点\"的核心概念。根据记忆上下文，学生正在学习电磁感应相关的内容。让我先回顾一下：\n\n从记忆上下文可以看到：\n1. 学生张三，高一，正在系统学习高中数学三角函数专题\n2. 但在课堂历史中，学生一直在学习物理电磁感应内容\n3. 最近的知识点包括：电磁感应、楞次定律、法拉第电磁感应定律、磁通量、右手定则、感应电流、感应电动势、自感\n\n从课堂历史来看，学生最近在复习电磁感应的错题和公式口诀，还想再试一下演示课堂。\n\n所以\"这个知识点\"应该是指电磁感应。\n\n根据强制规则A，我需要：\n1. 先给出文字讲解\n2. 调用 render_live_component 生成互动演示\n3. 调用 save_learning_resource(exercise) 出题\n\n让我先给出详细的文字讲解，然后并行调用工具。\n\n我需要：\n1. 解释电磁感应的核心概念\n2. 调用 render_live_component 生成一个可交互的演示\n3. 调用 save_learning_resource(exercise) 出题\n\n让我开始组织内容。\n</think>\n\n好的！让我详细解释**电磁感应**的核心概念 🎯\n\n---\n\n## ⚡ 电磁感应核心概念\n\n### 1️⃣ 什么是电磁感应？\n\n> **电磁感应**：利用**磁场变化**产生**电流**的现象\n\n**关键点**：不需要电池或其他电源，仅靠磁场变化就能产生电流！\n\n---\n\n### 2️⃣ 核心公式：磁通量\n\n$$\\Phi = B \\cdot S \\cdot \\cos\\theta$$\n\n| 符号 | 含义 |\n|------|------|\n| Φ | 磁通量（穿过某面积的磁感线数量） |\n| B | 磁感应强度 |\n| S | 线圈面积 |\n| θ | 磁场方向与面积法线的夹角 |\n\n**🔑 磁通量变化是产生感应电流的必要条件！**\n\n---\n\n### 3️⃣ 法拉第电磁感应定律\n\n$$E = n \\cdot \\frac{\\Delta \\Phi}{\\Delta t}$$\n\n> **核心思想**：磁通量变化越快，感应电动势越大\n\n---\n\n### 4️⃣ 判断电流方向的两种方法\n\n| 方法 | 适用情况 |\n|------|---------|\n| **右手定则** | 导体切割磁感线运动 |\n| **楞次定律** | 磁场变化引起磁通量变化 |\n\n**楞次定律口诀**：\"增反减同，来拒去留\"\n- 磁通量增加 → 感应电流产生**反向**磁场抵抗\n- 磁通量减少 → 感应电流产生**同向**磁场补偿\n\n---\n\n### 💡 生活类比\n\n想象一下：\n- **磁通量** = 落在你伞上的雨滴数量\n- **电磁感应** = 雨下得越快（变化率越大），你需要越用力撑伞（产生的感应电动势越大）\n\n---\n\n你想深入了解哪个具体部分？或者需要我做一道练习题来巩固理解吗？ 😊\n\n现在让我为你生成一个互动演示，帮助你更直观地理解电磁感应现象：\n\n"
+      },
+      {
+        "type": "toolCall",
+        "id": "call_function_cwq5lbucsmam_1",
+        "name": "render_live_component",
+        "arguments": {
+          "html": "<div class=\"container\">\n    <h2>🧲 电磁感应互动实验</h2>\n    <p class=\"instruction\">拖动磁铁上下移动，观察线圈中电流的变化！</p>\n    \n    <div class=\"experiment-area\">\n        <div class=\"magnet\" id=\"magnet\">\n            <div class=\"magnet-n\">N</div>\n            <div class=\"magnet-s\">S</div>\n        </div>\n        <div class=\"coil-container\">\n            <div class=\"coil\" id=\"coil\"></div>\n            <div class=\"ammeter\">\n                <div class=\"meter-display\" id=\"meterDisplay\">0.00</div>\n                <div class=\"meter-label\">电流 (A)</div>\n                <div class=\"needle\" id=\"needle\"></div>\n            </div>\n        </div>\n        <div class=\"direction-indicator\" id=\"directionIndicator\">\n            <span class=\"direction-label\">电流方向</span>\n            <span class=\"direction-value\" id=\"directionValue\">无电流</span>\n        </div>\n    </div>\n    \n    <div class=\"status-panel\">\n        <div class=\"status-item\">\n            <span class=\"status-label\">磁通量变化</span>\n            <span class=\"status-value\" id=\"fluxChange\">—</span>\n        </div>\n        <div class=\"status-item\">\n            <span class=\"status-label\">感应电动势</span>\n            <span class=\"status-value\" id=\"emfValue\">0 V</span>\n        </div>\n    </div>\n    \n    <div class=\"principle-box\">\n        <h4>📚 楞次定律解释</h4>\n        <p id=\"principleText\">移动磁铁，观察电磁感应现象！</p>\n    </div>\n</div>",
+          "css": ".container {\n    font-family: 'Segoe UI', sans-serif;\n    max-width: 600px;\n    margin: 0 auto;\n    padding: 20px;\n    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n    border-radius: 20px;\n    color: white;\n}\n\nh2 {\n    text-align: center;\n    margin-bottom: 10px;\n}\n\n.instruction {\n    text-align: center;\n    opacity: 0.9;\n    margin-bottom: 20px;\n}\n\n.experiment-area {\n    display: flex;\n    justify-content: center;\n    align-items: center;\n    gap: 30px;\n    padding: 30px;\n    background: rgba(255,255,255,0.1);\n    border-radius: 15px;\n    min-height: 200px;\n}\n\n.magnet {\n    width: 60px;\n    height: 120px;\n    background: linear-gradient(180deg, #ff6b6b 50%, #4ecdc4 50%);\n    border-radius: 10px;\n    display: flex;\n    flex-direction: column;\n    justify-content: center;\n    align-items: center;\n    cursor: grab;\n    user-select: none;\n    box-shadow: 0 4px 15px rgba(0,0,0,0.3);\n    transition: transform 0.1s;\n}\n\n.magnet:active {\n    cursor: grabbing;\n}\n\n.magnet-n, .magnet-s {\n    font-weight: bold;\n    font-size: 18px;\n    color: white;\n    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);\n}\n\n.coil-container {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    gap: 15px;\n}\n\n.coil {\n    width: 100px;\n    height: 100px;\n    border: 8px solid #ffd93d;\n    border-radius: 50%;\n    position: relative;\n    background: rgba(255,255,255,0.1);\n}\n\n.coil::before {\n    content: '';\n    position: absolute;\n    top: 50%;\n    left: -20px;\n    width: 20px;\n    height: 4px;\n    background: #ffd93d;\n}\n\n.coil::after {\n    content: '';\n    position: absolute;\n    top: 50%;\n    right: -20px;\n    width: 20px;\n    height: 4px;\n    background: #ffd93d;\n}\n\n.ammeter {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    gap: 5px;\n}\n\n.meter-display {\n    font-size: 24px;\n    font-weight: bold;\n    font-family: monospace;\n    background: #1a1a2e;\n    padding: 5px 15px;\n    border-radius: 5px;\n    color: #00ff00;\n}\n\n.meter-label {\n    font-size: 12px;\n    opacity: 0.8;\n}\n\n.direction-indicator {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    gap: 5px;\n    padding: 15px;\n    background: rgba(255,255,255,0.1);\n    border-radius: 10px;\n}\n\n.direction-label {\n    font-size: 12px;\n    opacity: 0.8;\n}\n\n.direction-value {\n    font-size: 16px;\n    font-weight: bold;\n}\n\n.status-panel {\n    display: flex;\n    justify-content: space-around;\n    margin-top: 20px;\n    padding: 15px;\n    background: rgba(255,255,255,0.1);\n    border-radius: 10px;\n}\n\n.status-item {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    gap: 5px;\n}\n\n.status-label {\n    font-size: 12px;\n    opacity: 0.8;\n}\n\n.status-value {\n    font-size: 18px;\n    font-weight: bold;\n}\n\n.principle-box {\n    margin-top: 20px;\n    padding: 15px;\n    background: rgba(255,255,255,0.15);\n    border-radius: 10px;\n    text-align: center;\n}\n\n.principle-box h4 {\n    margin: 0 0 10px 0;\n}\n\n.principle-box p {\n    margin: 0;\n    font-size: 14px;\n    line-height: 1.5;\n}",
+          "js": "const magnet = document.getElementById('magnet');\nconst coil = document.getElementById('coil');\nconst meterDisplay = document.getElementById('meterDisplay');\nconst directionValue = document.getElementById('directionValue');\nconst fluxChange = document.getElementById('fluxChange');\nconst emfValue = document.getElementById('emfValue');\nconst principleText = document.getElementById('principleText');\n\nlet isDragging = false;\nlet startY = 0;\nlet magnetY = 0;\nlet currentEMF = 0;\nlet velocity = 0;\nlet lastMagnetY = 0;\nlet animationId = null;\n\n// 拖动磁铁\nmagnet.addEventListener('mousedown', (e) => {\n    isDragging = true;\n    startY = e.clientY - magnetY;\n    magnet.style.cursor = 'grabbing';\n});\n\ndocument.addEventListener('mousemove', (e) => {\n    if (!isDragging) return;\n    \n    magnetY = e.clientY - startY;\n    // 限制移动范围\n    magnetY = Math.max(-100, Math.min(100, magnetY));\n    magnet.style.transform = `translateY(${magnetY}px)`;\n    \n    // 计算速度（用于计算感应电动势）\n    velocity = magnetY - lastMagnetY;\n    lastMagnetY = magnetY;\n    \n    updateExperiment();\n});\n\ndocument.addEventListener('mouseup', () => {\n    if (isDragging) {\n        isDragging = false;\n        magnet.style.cursor = 'grab';\n        velocity = 0;\n        updateExperiment();\n    }\n});\n\nfunction updateExperiment() {\n    // 根据磁铁位置和速度计算感应电动势\n    // E = B * L * v (简化模型)\n    const B = 0.5; // 磁感应强度\n    const L = 0.1; // 线圈等效长度\n    const baseEMF = Math.abs(velocity) * B * L * 50; // 缩放因子\n    \n    // 添加一些惯性效果\n    currentEMF = currentEMF * 0.8 + baseEMF * 0.2;\n    \n    // 更新显示\n    meterDisplay.textContent = currentEMF.toFixed(2);\n    emfValue.textContent = (currentEMF * 10).toFixed(2) + ' V';\n    \n    // 判断电流方向\n    if (Math.abs(currentEMF) < 0.1) {\n        directionValue.textContent = '无电流';\n        directionValue.style.color = '#aaa';\n        fluxChange.textContent = '不变';\n        principleText.textContent = '磁铁静止时，磁通量不变，没有感应电流！';\n    } else if (velocity > 0) {\n        // 向下移动（N极靠近线圈）\n        directionValue.textContent = '逆时针 ↑';\n        directionValue.style.color = '#ff6b6b';\n        fluxChange.textContent = '增加 ↑';\n        principleText.textContent = 'N极靠近 → 磁通量增加 → 感应电流产生反向磁场（楞次定律：增反减同）';\n    } else if (velocity < 0) {\n        // 向上移动（N极远离线圈）\n        directionValue.textContent = '顺时针 ↓';\n        directionValue.style.color = '#4ecdc4';\n        fluxChange.textContent = '减少 ↓';\n        principleText.textContent = 'N极远离 → 磁通量减少 → 感应电流产生同向磁场补偿（楞次定律：增反减同）';\n    }\n    \n    // 发送结果到系统\n    window.HeurisStage.emit('experiment-result', {\n        magnetPosition: magnetY,\n        velocity: velocity,\n        emf: currentEMF * 10,\n        current: currentEMF,\n        direction: Math.abs(currentEMF) < 0.1 ? 'none' : (velocity > 0 ? 'counterclockwise' : 'clockwise'),\n        fluxChange: Math.abs(currentEMF) < 0.1 ? 'constant' : (velocity > 0 ? 'increasing' : 'decreasing'),\n        knowledgePoint: '电磁感应 / 楞次定律'\n    });\n}\n\n// 缓慢衰减效果\nfunction decay() {\n    if (!isDragging) {\n        currentEMF *= 0.95;\n        meterDisplay.textContent = currentEMF.toFixed(2);\n        emfValue.textContent = (currentEMF * 10).toFixed(2) + ' V';\n        \n        if (currentEMF < 0.01) {\n            directionValue.textContent = '无电流';\n            directionValue.style.color = '#aaa';\n            fluxChange.textContent = '不变';\n            principleText.textContent = '磁铁静止时，磁通量不变，没有感应电流！';\n        }\n    }\n    requestAnimationFrame(decay);\n}\ndecay();\n\n// 初始提示\nwindow.HeurisStage.emit('experiment-result', {\n    type: 'init',\n    message: '拖动磁铁开始实验',\n    knowledgePoint: '电磁感应 / 楞次定律'\n});",
+          "description": "电磁感应互动实验 - 拖动磁铁观察电流变化"
+        }
+      },
+      {
+        "type": "toolCall",
+        "id": "call_function_cwq5lbucsmam_2",
+        "name": "save_learning_resource",
+        "arguments": {
+          "title": "电磁感应核心概念练习题",
+          "content": "## 磁通量与电磁感应基础练习\n\n**第1题（⭐）** 下列哪种情况会使穿过线圈的磁通量增大？\n\nA. 线圈面积减小  \nB. 磁场方向改为与线圈平面平行  \nC. 线圈翻转180°  \nD. 磁场强度增强  \n\n**题型：** 单选题  **难度：** 简单  **知识点：** 磁通量公式 Φ = B·S·cosθ\n\n---\n\n**第2题（⭐⭐）** 一根导体棒长度 L = 0.5m，在磁感应强度 B = 0.4T 的匀强磁场中，以速度 v = 10m/s 垂直切割磁感线。\n\n求：(1) 导体棒中的感应电动势 E = ?  \n求：(2) 若回路总电阻 R = 5Ω，电流 I = ?\n\n**题型：** 计算题  **难度：** 中等  **知识点：** 法拉第电磁感应定律 E = BLv\n\n---\n\n**第3题（⭐⭐）** 当条形磁铁的N极迅速插入线圈时：\n\n(1) 线圈中的感应电流方向如何？（俯视图）  \n(2) 若磁铁静止不动，感应电流是否存在？为什么？\n\n**题型：** 简答题  **难度：** 中等  **知识点：** 楞次定律应用\n\n> 💡 提示：使用\"增反减同，来拒去留\"口诀分析",
+          "subject": "物理",
+          "tags": [
+            "电磁感应",
+            "磁通量",
+            "法拉第定律",
+            "楞次定律",
+            "练习题"
+          ],
+          "category": "exercise"
+        }
+      }
+    ],
+    "api": "openai-completions",
+    "provider": "custom",
+    "model": "MiniMax-M2.5-highspeed",
+    "usage": {
+      "input": 11796,
+      "output": 3553,
+      "cacheRead": 0,
+      "cacheWrite": 0,
+      "totalTokens": 15349,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      }
+    },
+    "stopReason": "toolUse",
+    "timestamp": 1778156771114,
+    "responseId": "064bb7e5bacee6fd1f0204daaf4e853f"
+  },
+  {
+    "role": "toolResult",
+    "toolCallId": "call_function_cwq5lbucsmam_1",
+    "toolName": "render_live_component",
+    "content": [
+      {
+        "type": "text",
+        "text": "Component has been rendered successfully on the student's interactive stage."
+      }
+    ],
+    "details": {
+      "html": "<div class=\"container\">\n    <h2>🧲 电磁感应互动实验</h2>\n    <p class=\"instruction\">拖动磁铁上下移动，观察线圈中电流的变化！</p>\n    \n    <div class=\"experiment-area\">\n        <div class=\"magnet\" id=\"magnet\">\n            <div class=\"magnet-n\">N</div>\n            <div class=\"magnet-s\">S</div>\n        </div>\n        <div class=\"coil-container\">\n            <div class=\"coil\" id=\"coil\"></div>\n            <div class=\"ammeter\">\n                <div class=\"meter-display\" id=\"meterDisplay\">0.00</div>\n                <div class=\"meter-label\">电流 (A)</div>\n                <div class=\"needle\" id=\"needle\"></div>\n            </div>\n        </div>\n        <div class=\"direction-indicator\" id=\"directionIndicator\">\n            <span class=\"direction-label\">电流方向</span>\n            <span class=\"direction-value\" id=\"directionValue\">无电流</span>\n        </div>\n    </div>\n    \n    <div class=\"status-panel\">\n        <div class=\"status-item\">\n            <span class=\"status-label\">磁通量变化</span>\n            <span class=\"status-value\" id=\"fluxChange\">—</span>\n        </div>\n        <div class=\"status-item\">\n            <span class=\"status-label\">感应电动势</span>\n            <span class=\"status-value\" id=\"emfValue\">0 V</span>\n        </div>\n    </div>\n    \n    <div class=\"principle-box\">\n        <h4>📚 楞次定律解释</h4>\n        <p id=\"principleText\">移动磁铁，观察电磁感应现象！</p>\n    </div>\n</div>",
+      "css": ".container {\n    font-family: 'Segoe UI', sans-serif;\n    max-width: 600px;\n    margin: 0 auto;\n    padding: 20px;\n    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n    border-radius: 20px;\n    color: white;\n}\n\nh2 {\n    text-align: center;\n    margin-bottom: 10px;\n}\n\n.instruction {\n    text-align: center;\n    opacity: 0.9;\n    margin-bottom: 20px;\n}\n\n.experiment-area {\n    display: flex;\n    justify-content: center;\n    align-items: center;\n    gap: 30px;\n    padding: 30px;\n    background: rgba(255,255,255,0.1);\n    border-radius: 15px;\n    min-height: 200px;\n}\n\n.magnet {\n    width: 60px;\n    height: 120px;\n    background: linear-gradient(180deg, #ff6b6b 50%, #4ecdc4 50%);\n    border-radius: 10px;\n    display: flex;\n    flex-direction: column;\n    justify-content: center;\n    align-items: center;\n    cursor: grab;\n    user-select: none;\n    box-shadow: 0 4px 15px rgba(0,0,0,0.3);\n    transition: transform 0.1s;\n}\n\n.magnet:active {\n    cursor: grabbing;\n}\n\n.magnet-n, .magnet-s {\n    font-weight: bold;\n    font-size: 18px;\n    color: white;\n    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);\n}\n\n.coil-container {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    gap: 15px;\n}\n\n.coil {\n    width: 100px;\n    height: 100px;\n    border: 8px solid #ffd93d;\n    border-radius: 50%;\n    position: relative;\n    background: rgba(255,255,255,0.1);\n}\n\n.coil::before {\n    content: '';\n    position: absolute;\n    top: 50%;\n    left: -20px;\n    width: 20px;\n    height: 4px;\n    background: #ffd93d;\n}\n\n.coil::after {\n    content: '';\n    position: absolute;\n    top: 50%;\n    right: -20px;\n    width: 20px;\n    height: 4px;\n    background: #ffd93d;\n}\n\n.ammeter {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    gap: 5px;\n}\n\n.meter-display {\n    font-size: 24px;\n    font-weight: bold;\n    font-family: monospace;\n    background: #1a1a2e;\n    padding: 5px 15px;\n    border-radius: 5px;\n    color: #00ff00;\n}\n\n.meter-label {\n    font-size: 12px;\n    opacity: 0.8;\n}\n\n.direction-indicator {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    gap: 5px;\n    padding: 15px;\n    background: rgba(255,255,255,0.1);\n    border-radius: 10px;\n}\n\n.direction-label {\n    font-size: 12px;\n    opacity: 0.8;\n}\n\n.direction-value {\n    font-size: 16px;\n    font-weight: bold;\n}\n\n.status-panel {\n    display: flex;\n    justify-content: space-around;\n    margin-top: 20px;\n    padding: 15px;\n    background: rgba(255,255,255,0.1);\n    border-radius: 10px;\n}\n\n.status-item {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    gap: 5px;\n}\n\n.status-label {\n    font-size: 12px;\n    opacity: 0.8;\n}\n\n.status-value {\n    font-size: 18px;\n    font-weight: bold;\n}\n\n.principle-box {\n    margin-top: 20px;\n    padding: 15px;\n    background: rgba(255,255,255,0.15);\n    border-radius: 10px;\n    text-align: center;\n}\n\n.principle-box h4 {\n    margin: 0 0 10px 0;\n}\n\n.principle-box p {\n    margin: 0;\n    font-size: 14px;\n    line-height: 1.5;\n}",
+      "js": "const magnet = document.getElementById('magnet');\nconst coil = document.getElementById('coil');\nconst meterDisplay = document.getElementById('meterDisplay');\nconst directionValue = document.getElementById('directionValue');\nconst fluxChange = document.getElementById('fluxChange');\nconst emfValue = document.getElementById('emfValue');\nconst principleText = document.getElementById('principleText');\n\nlet isDragging = false;\nlet startY = 0;\nlet magnetY = 0;\nlet currentEMF = 0;\nlet velocity = 0;\nlet lastMagnetY = 0;\nlet animationId = null;\n\n// 拖动磁铁\nmagnet.addEventListener('mousedown', (e) => {\n    isDragging = true;\n    startY = e.clientY - magnetY;\n    magnet.style.cursor = 'grabbing';\n});\n\ndocument.addEventListener('mousemove', (e) => {\n    if (!isDragging) return;\n    \n    magnetY = e.clientY - startY;\n    // 限制移动范围\n    magnetY = Math.max(-100, Math.min(100, magnetY));\n    magnet.style.transform = `translateY(${magnetY}px)`;\n    \n    // 计算速度（用于计算感应电动势）\n    velocity = magnetY - lastMagnetY;\n    lastMagnetY = magnetY;\n    \n    updateExperiment();\n});\n\ndocument.addEventListener('mouseup', () => {\n    if (isDragging) {\n        isDragging = false;\n        magnet.style.cursor = 'grab';\n        velocity = 0;\n        updateExperiment();\n    }\n});\n\nfunction updateExperiment() {\n    // 根据磁铁位置和速度计算感应电动势\n    // E = B * L * v (简化模型)\n    const B = 0.5; // 磁感应强度\n    const L = 0.1; // 线圈等效长度\n    const baseEMF = Math.abs(velocity) * B * L * 50; // 缩放因子\n    \n    // 添加一些惯性效果\n    currentEMF = currentEMF * 0.8 + baseEMF * 0.2;\n    \n    // 更新显示\n    meterDisplay.textContent = currentEMF.toFixed(2);\n    emfValue.textContent = (currentEMF * 10).toFixed(2) + ' V';\n    \n    // 判断电流方向\n    if (Math.abs(currentEMF) < 0.1) {\n        directionValue.textContent = '无电流';\n        directionValue.style.color = '#aaa';\n        fluxChange.textContent = '不变';\n        principleText.textContent = '磁铁静止时，磁通量不变，没有感应电流！';\n    } else if (velocity > 0) {\n        // 向下移动（N极靠近线圈）\n        directionValue.textContent = '逆时针 ↑';\n        directionValue.style.color = '#ff6b6b';\n        fluxChange.textContent = '增加 ↑';\n        principleText.textContent = 'N极靠近 → 磁通量增加 → 感应电流产生反向磁场（楞次定律：增反减同）';\n    } else if (velocity < 0) {\n        // 向上移动（N极远离线圈）\n        directionValue.textContent = '顺时针 ↓';\n        directionValue.style.color = '#4ecdc4';\n        fluxChange.textContent = '减少 ↓';\n        principleText.textContent = 'N极远离 → 磁通量减少 → 感应电流产生同向磁场补偿（楞次定律：增反减同）';\n    }\n    \n    // 发送结果到系统\n    window.HeurisStage.emit('experiment-result', {\n        magnetPosition: magnetY,\n        velocity: velocity,\n        emf: currentEMF * 10,\n        current: currentEMF,\n        direction: Math.abs(currentEMF) < 0.1 ? 'none' : (velocity > 0 ? 'counterclockwise' : 'clockwise'),\n        fluxChange: Math.abs(currentEMF) < 0.1 ? 'constant' : (velocity > 0 ? 'increasing' : 'decreasing'),\n        knowledgePoint: '电磁感应 / 楞次定律'\n    });\n}\n\n// 缓慢衰减效果\nfunction decay() {\n    if (!isDragging) {\n        currentEMF *= 0.95;\n        meterDisplay.textContent = currentEMF.toFixed(2);\n        emfValue.textContent = (currentEMF * 10).toFixed(2) + ' V';\n        \n        if (currentEMF < 0.01) {\n            directionValue.textContent = '无电流';\n            directionValue.style.color = '#aaa';\n            fluxChange.textContent = '不变';\n            principleText.textContent = '磁铁静止时，磁通量不变，没有感应电流！';\n        }\n    }\n    requestAnimationFrame(decay);\n}\ndecay();\n\n// 初始提示\nwindow.HeurisStage.emit('experiment-result', {\n    type: 'init',\n    message: '拖动磁铁开始实验',\n    knowledgePoint: '电磁感应 / 楞次定律'\n});",
+      "description": "电磁感应互动实验 - 拖动磁铁观察电流变化"
+    },
+    "isError": false,
+    "timestamp": 1778156811513
+  },
+  {
+    "role": "toolResult",
+    "toolCallId": "call_function_cwq5lbucsmam_2",
+    "toolName": "save_learning_resource",
+    "content": [
+      {
+        "type": "text",
+        "text": "Saved learning resource locally: 电磁感应核心概念练习题"
+      }
+    ],
+    "details": {
+      "id": "local-41",
+      "title": "电磁感应核心概念练习题",
+      "subject": "物理",
+      "category": "exercise",
+      "content": "## 磁通量与电磁感应基础练习\n\n**第1题（⭐）** 下列哪种情况会使穿过线圈的磁通量增大？\n\nA. 线圈面积减小  \nB. 磁场方向改为与线圈平面平行  \nC. 线圈翻转180°  \nD. 磁场强度增强  \n\n**题型：** 单选题  **难度：** 简单  **知识点：** 磁通量公式 Φ = B·S·cosθ\n\n---\n\n**第2题（⭐⭐）** 一根导体棒长度 L = 0.5m，在磁感应强度 B = 0.4T 的匀强磁场中，以速度 v = 10m/s 垂直切割磁感线。\n\n求：(1) 导体棒中的感应电动势 E = ?  \n求：(2) 若回路总电阻 R = 5Ω，电流 I = ?\n\n**题型：** 计算题  **难度：** 中等  **知识点：** 法拉第电磁感应定律 E = BLv\n\n---\n\n**第3题（⭐⭐）** 当条形磁铁的N极迅速插入线圈时：\n\n(1) 线圈中的感应电流方向如何？（俯视图）  \n(2) 若磁铁静止不动，感应电流是否存在？为什么？\n\n**题型：** 简答题  **难度：** 中等  **知识点：** 楞次定律应用\n\n> 💡 提示：使用\"增反减同，来拒去留\"口诀分析",
+      "file_url": null,
+      "tags": [
+        "exercise",
+        "电磁感应",
+        "磁通量",
+        "法拉第定律",
+        "楞次定律",
+        "练习题"
+      ],
+      "difficulty": "medium",
+      "created_by": "classroom_agent",
+      "is_shared": true,
+      "created_at": "2026-05-07 12:26:51",
+      "updated_at": "2026-05-07 12:26:51",
+      "storage": "local",
+      "saved": true
+    },
+    "isError": false,
+    "timestamp": 1778156811513
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "<think>\n好的，我已经完成了任务：\n1. 给学生详细讲解了电磁感应的核心概念\n2. 调用了 render_live_component 生成了一个互动演示\n3. 调用了 save_learning_resource 出了一道练习题\n\n现在我需要输出最终回复。我已经看过工具结果，不需要再做什么了。\n</think>\n\n我已经为你准备好了：\n\n## 📖 电磁感应核心概念讲解\n\n**核心就三句话：**\n1. **磁通量变化** → 产生感应电动势\n2. **变化越快** → 电动势越大\n3. **感应电流方向** → 总是阻碍磁通量变化（楞次定律）\n\n---\n\n## 🎮 互动演示已开启！\n\n上面是一个**电磁感应互动实验**，你可以：\n- **拖动磁铁**上下移动\n- 观察电流表读数变化\n- 理解**楞次定律**的实际应用\n\n**观察要点：**\n| 磁铁运动 | 磁通量变化 | 电流方向 | 原理 |\n|---------|-----------|---------|------|\n| N极靠近 | ↑ 增加 | 逆时针 | 增反 |\n| N极远离 | ↓ 减少 | 顺时针 | 减同 |\n| 静止 | 不变 | 无电流 | 无变化 |\n\n---\n\n## 📝 练习题已准备\n\n我出了一道**3道综合练习题**，涵盖：\n- 第1题：磁通量判断（⭐）\n- 第2题：法拉第定律计算（⭐⭐）\n- 第3题：楞次定律应用（⭐⭐）\n\n**答题方式：** 把你的答案告诉我，例如\"第1题D，第2题(1)2V...\"\n\n---\n\n**有什么不明白的地方吗？** 或者想先玩一下上面的实验？ 😊"
+      }
+    ],
+    "api": "openai-completions",
+    "provider": "custom",
+    "model": "MiniMax-M2.5-highspeed",
+    "usage": {
+      "input": 3745,
+      "output": 361,
+      "cacheRead": 11643,
+      "cacheWrite": 0,
+      "totalTokens": 15749,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      }
+    },
+    "stopReason": "stop",
+    "timestamp": 1778156811513,
+    "responseId": "064bb80d09e18804ea149ab4c989dac8"
+  }
+]

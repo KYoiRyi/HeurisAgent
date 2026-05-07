@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
+import { Markdown } from "@/components/ui/markdown";
 
 interface ReviewPlan {
   id: string;
@@ -167,7 +168,9 @@ export default function ReviewPage() {
                   {activePlan.plan_content && (
                     <div className="rounded-lg bg-purple-50 dark:bg-purple-950/20 p-4">
                       <h4 className="text-sm font-semibold text-purple-700 dark:text-purple-400 mb-2">复习计划详情</h4>
-                      <p className="text-sm text-purple-800 dark:text-purple-300 whitespace-pre-wrap">{activePlan.plan_content}</p>
+                      <div className="text-sm text-purple-800 dark:text-purple-300 prose prose-sm dark:prose-invert max-w-none">
+                        <Markdown>{activePlan.plan_content}</Markdown>
+                      </div>
                     </div>
                   )}
 
@@ -176,7 +179,9 @@ export default function ReviewPage() {
                       <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2 flex items-center gap-1.5">
                         <Lightbulb className="h-3.5 w-3.5" />复习策略建议
                       </h4>
-                      <p className="text-sm text-blue-800 dark:text-blue-300 whitespace-pre-wrap">{activePlan.review_strategy}</p>
+                      <div className="text-sm text-blue-800 dark:text-blue-300 prose prose-sm dark:prose-invert max-w-none">
+                        <Markdown>{activePlan.review_strategy}</Markdown>
+                      </div>
                     </div>
                   )}
                 </div>
