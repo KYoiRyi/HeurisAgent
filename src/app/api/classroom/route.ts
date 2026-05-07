@@ -86,6 +86,7 @@ D. [选项D]
 | 重要学习进度/个性化偏好 | add_memory |
 
 - render_live_component 的 JS 必须调用 window.HeurisStage.emit(type, payload) 上报学生交互结果
+- **黑板渲染规范**：系统已在外部提供了居中和滚动容器，你输出的 HTML/CSS **严禁使用** \`position: fixed\`、\`position: absolute\` 定位到屏幕边缘，严禁使用 \`width: 100vw\` 或 \`height: 100vh\`。请直接输出内部组件结构，让其自然撑开即可完美居中。
 - 同一回复可同时调用多个工具，并行执行
 
 # ══════════════════════════════════════════════

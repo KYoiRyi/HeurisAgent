@@ -160,12 +160,29 @@ function buildStageSrcDoc(component: LiveComponent): string {
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <style>
-        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 1rem; }
+        html, body { margin: 0; padding: 0; min-height: 100vh; }
+        body { 
+          font-family: system-ui, -apple-system, sans-serif; 
+          display: flex;
+          flex-direction: column;
+          box-sizing: border-box;
+          padding: 1rem;
+        }
+        #heuris-stage-container {
+          margin: auto;
+          max-width: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+        /* AI custom CSS below */
         ${css}
       </style>
     </head>
     <body>
-      ${component.html}
+      <div id="heuris-stage-container">
+        ${component.html}
+      </div>
       <script>
         (function () {
           var stageDescription = ${description};
