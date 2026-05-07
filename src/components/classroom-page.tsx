@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   MessageSquareText, Send, Bot, User, Sparkles,
   Lightbulb, Loader2, FileText, RefreshCw, Wrench, CheckCircle2, XCircle, Terminal,
-  ChevronLeft, ChevronRight, PlusCircle
+  ChevronLeft, ChevronRight, PlusCircle, History, BookOpen
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,39 @@ import {
 } from "@/components/ui/select";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+// ── Archived session (stored in localStorage) ────────────────────────────────
+interface ArchivedSession {
+  sessionId: string;
+  subject: string;
+  title: string;        // auto-generated from first user message
+  archivedAt: string;   // ISO timestamp
+  messageCount: number;
+}
+
+const LS_ACTIVE_SESSION = (subject: string) => `heuris-active-session:${subject}`;
+const LS_SESSIONS_LIST  = "heuris-archived-sessions";
+
+function getArchivedSessions(): ArchivedSession[] {
+  if (typeof window === "undefined") return [];
+  try { return JSON.parse(localStorage.getItem(LS_SESSIONS_LIST) ?? "[]"); } catch { return []; }
+}
+
+function saveArchivedSessions(list: ArchivedSession[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LS_SESSIONS_LIST, JSON.stringify(list.slice(0, 20)));
+}
+
+function getActiveSessionId(subject: string): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(LS_ACTIVE_SESSION(subject)) ?? null;
+}
+
+function setActiveSessionId(subject: string, id: string | null) {
+  if (typeof window === "undefined") return;
+  if (id) localStorage.setItem(LS_ACTIVE_SESSION(subject), id);
+  else localStorage.removeItem(LS_ACTIVE_SESSION(subject));
+}
 
 interface LiveComponent {
   html: string;
@@ -336,6 +369,8 @@ export default function ClassroomPage() {
   const [exerciseAnswers, setExerciseAnswers] = useState<Record<string, string>>({});
   const [exerciseProcesses, setExerciseProcesses] = useState<Record<string, string>>({});
   const [newClassroomArmed, setNewClassroomArmed] = useState(false);
+  const [archivedSessions, setArchivedSessions] = useState<ArchivedSession[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const newClassroomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stageEventsRef = useRef<StageEvent[]>([]);
@@ -368,9 +403,12 @@ export default function ClassroomPage() {
     }
   }, [selectedSubject]);
 
-  const fetchClassroomHistory = useCallback(async () => {
+  const fetchClassroomHistory = useCallback(async (overrideSessionId?: string | null) => {
     try {
-      const res = await fetch(`/api/classroom/history?subject=${encodeURIComponent(selectedSubject)}`);
+      const sid = overrideSessionId !== undefined ? overrideSessionId : getActiveSessionId(selectedSubject);
+      let url = `/api/classroom/history?subject=${encodeURIComponent(selectedSubject)}`;
+      if (sid) url += `&sessionId=${encodeURIComponent(sid)}`;
+      const res = await fetch(url);
       const json = await res.json();
       if (!json.success) return;
 
@@ -385,8 +423,16 @@ export default function ClassroomPage() {
         toolCalls: row.tool_calls ?? [],
       })));
 
-      const latestSession = [...rows].reverse().find((row) => row.session_id)?.session_id ?? null;
-      setSessionId(latestSession);
+      // Restore the persisted sessionId if we have one
+      if (sid) {
+        setSessionId(sid);
+      } else {
+        const latestSession = [...rows].reverse().find((row) => row.session_id)?.session_id ?? null;
+        if (latestSession) {
+          setSessionId(latestSession);
+          setActiveSessionId(selectedSubject, latestSession);
+        }
+      }
       stageEventsRef.current = [];
       setStageEvents([]);
     } catch (err) {
@@ -398,8 +444,10 @@ export default function ClassroomPage() {
     fetchClassroomResources();
   }, [fetchClassroomResources]);
 
+  // On mount / subject change: restore sessionId from localStorage, then fetch matching history
   useEffect(() => {
-    fetchClassroomHistory();
+    setArchivedSessions(getArchivedSessions());
+    void fetchClassroomHistory();
   }, [fetchClassroomHistory]);
 
   const pushStatusHint = useCallback((hint: string) => {
@@ -445,22 +493,43 @@ export default function ClassroomPage() {
   }, [messages]);
 
   const handleCreateSession = async () => {
-    const fallbackId = "local-" + Date.now().toString();
-    setSessionId(fallbackId);
-    return fallbackId;
+    const newId = "local-" + Date.now().toString();
+    setSessionId(newId);
+    setActiveSessionId(selectedSubject, newId);
+    return newId;
   };
 
   const handleNewClassroom = () => {
     if (!newClassroomArmed) {
-      // First click: arm the button, auto-disarm after 3s
       setNewClassroomArmed(true);
       if (newClassroomTimerRef.current) clearTimeout(newClassroomTimerRef.current);
       newClassroomTimerRef.current = setTimeout(() => setNewClassroomArmed(false), 3000);
       return;
     }
-    // Second click within 3s: execute
     if (newClassroomTimerRef.current) clearTimeout(newClassroomTimerRef.current);
     setNewClassroomArmed(false);
+
+    // Archive current session before clearing
+    if (sessionId && messages.length > 0) {
+      const firstUserMsg = messages.find(m => m.role === "student");
+      const title = firstUserMsg
+        ? firstUserMsg.content.replace(/\[EXERCISE_SUBMISSION\][\s\S]*/, "").trim().slice(0, 40) || "课堂记录"
+        : `${selectedSubject} 课堂 ${new Date().toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+      const archive: ArchivedSession = {
+        sessionId,
+        subject: selectedSubject,
+        title,
+        archivedAt: new Date().toISOString(),
+        messageCount: messages.length,
+      };
+      const updated = [archive, ...getArchivedSessions().filter(s => s.sessionId !== sessionId)];
+      saveArchivedSessions(updated);
+      setArchivedSessions(updated);
+    }
+
+    // Clear active session from localStorage so refresh shows empty classroom
+    setActiveSessionId(selectedSubject, null);
+
     // Reset all classroom state
     setMessages([]);
     setStageEvents([]);
@@ -472,11 +541,21 @@ export default function ClassroomPage() {
     setSelectedResourceId(null);
     setInputValue("");
     setIsStreaming(false);
-    // Generate a fresh session so the agent starts with clean context
+
+    // Fresh session
     const freshId = "local-" + Date.now().toString();
     setSessionId(freshId);
-    // Reload resources for the fresh classroom
+    setActiveSessionId(selectedSubject, freshId);
     void fetchClassroomResources();
+  };
+
+  // Resume an archived session
+  const handleResumeSession = (archived: ArchivedSession) => {
+    setShowHistory(false);
+    setActiveSessionId(archived.subject, archived.sessionId);
+    setSelectedSubject(archived.subject);
+    // fetchClassroomHistory will re-run due to selectedSubject change (or call directly)
+    void fetchClassroomHistory(archived.sessionId);
   };
 
   const activeComponent = [...messages].reverse().find(m => m.liveComponent)?.liveComponent;
@@ -705,6 +784,20 @@ export default function ClassroomPage() {
           </Button>
           <Button
             size="sm"
+            variant={showHistory ? "secondary" : "outline"}
+            onClick={() => setShowHistory(v => !v)}
+            title="历史课堂记录"
+          >
+            <History className="h-3.5 w-3.5 mr-1" />
+            历史课堂
+            {archivedSessions.length > 0 && (
+              <span className="ml-1 rounded-full bg-emerald-500 text-white text-[9px] px-1 leading-4">
+                {archivedSessions.length}
+              </span>
+            )}
+          </Button>
+          <Button
+            size="sm"
             variant={newClassroomArmed ? "destructive" : "outline"}
             onClick={handleNewClassroom}
             disabled={isStreaming}
@@ -726,6 +819,42 @@ export default function ClassroomPage() {
           </Button>
         </div>
       </div>
+
+      {/* History panel */}
+      {showHistory && (
+        <div className="shrink-0 rounded-xl border bg-background shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-muted/30">
+            <BookOpen className="h-4 w-4 text-emerald-500" />
+            <span className="text-sm font-semibold">历史课堂记录</span>
+            <span className="ml-auto text-xs text-muted-foreground">{archivedSessions.length} 条</span>
+          </div>
+          {archivedSessions.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-muted-foreground">暂无归档课堂</p>
+          ) : (
+            <div className="divide-y max-h-52 overflow-y-auto">
+              {archivedSessions.map((s) => (
+                <button
+                  key={s.sessionId}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                  onClick={() => handleResumeSession(s)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{s.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {new Date(s.archivedAt).toLocaleString("zh-CN", {
+                        month: "numeric", day: "numeric",
+                        hour: "2-digit", minute: "2-digit"
+                      })} · {s.messageCount} 条消息
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="shrink-0 text-[10px]">{s.subject}</Badge>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {statusHints.length > 0 && (
         <div className="flex shrink-0 flex-wrap gap-2">
           {statusHints.map((hint, index) => (
@@ -736,6 +865,7 @@ export default function ClassroomPage() {
           ))}
         </div>
       )}
+
 
       {/* Main Split Layout */}
       <ResizablePanelGroup orientation="horizontal" className="flex-1 rounded-lg border">

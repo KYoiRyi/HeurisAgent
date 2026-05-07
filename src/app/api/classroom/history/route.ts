@@ -5,12 +5,13 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const subject = searchParams.get("subject");
+    const sessionId = searchParams.get("sessionId");
     const limitParam = searchParams.get("limit");
     const limit = limitParam ? Math.min(Number(limitParam) || 80, 200) : 80;
 
     return NextResponse.json({
       success: true,
-      data: classroomHistoryStore.list({ subject, limit }),
+      data: classroomHistoryStore.list({ subject, sessionId, limit }),
       storage: "local",
     });
   } catch (error) {

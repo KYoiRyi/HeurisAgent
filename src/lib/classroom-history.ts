@@ -54,13 +54,18 @@ class ClassroomHistoryStore {
     return row ? toHistoryMessage(row) : null;
   }
 
-  list(opts: { subject?: string | null; limit?: number } = {}): ClassroomHistoryMessage[] {
+  list(opts: { subject?: string | null; sessionId?: string | null; limit?: number } = {}): ClassroomHistoryMessage[] {
     const conditions: string[] = [];
     const values: unknown[] = [];
 
     if (opts.subject) {
       conditions.push("subject = ?");
       values.push(opts.subject);
+    }
+
+    if (opts.sessionId) {
+      conditions.push("session_id = ?");
+      values.push(opts.sessionId);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
