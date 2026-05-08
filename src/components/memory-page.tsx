@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Markdown } from "@/components/ui/markdown";
 
 interface Memory {
   id: number;
@@ -47,6 +49,7 @@ export default function MemoryPage() {
   const [newImportance, setNewImportance] = useState<1 | 2 | 3>(1);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewingMemory, setViewingMemory] = useState<Memory | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -231,7 +234,7 @@ export default function MemoryPage() {
           <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             <Pin className="h-3 w-3" /> 已固定
           </div>
-          {pinned.map((m) => <MemoryCard key={m.id} memory={m} onDelete={handleDelete} onPin={handlePin} />)}
+          {pinned.map((m) => <MemoryCard key={m.id} memory={m} onDelete={handleDelete} onPin={handlePin} onClick={() => setViewingMemory(m)} />)}
         </div>
       )}
 
@@ -249,28 +252,75 @@ export default function MemoryPage() {
         </Card>
       ) : (
         <div className="space-y-2">
-          {unpinned.map((m) => <MemoryCard key={m.id} memory={m} onDelete={handleDelete} onPin={handlePin} />)}
+          {unpinned.map((m) => <MemoryCard key={m.id} memory={m} onDelete={handleDelete} onPin={handlePin} onClick={() => setViewingMemory(m)} />)}
         </div>
       )}
+
+      {/* View Memory Dialog */}
+      <Dialog open={!!viewingMemory} onOpenChange={(open) => !open && setViewingMemory(null)}>
+        <DialogContent className="sm:max-w-xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Brain className="h-5 w-5 text-primary" />
+              记忆详情
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            {viewingMemory && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 flex-wrap border-b pb-4">
+                  <Badge variant="secondary" className={`text-xs px-2 py-0.5 ${SOURCE_META[viewingMemory.source]?.color || "bg-slate-500/10"}`}>
+                    {SOURCE_META[viewingMemory.source]?.label || viewingMemory.source}
+                  </Badge>
+                  {viewingMemory.importance >= 2 && (
+                    <Badge variant="secondary" className={`text-xs px-2 py-0.5 ${viewingMemory.importance === 3 ? "bg-red-500/10 text-red-600" : "bg-yellow-500/10 text-yellow-600"}`}>
+                      <Star className="h-3 w-3 mr-1" />
+                      {viewingMemory.importance === 3 ? "关键" : "重要"}
+                    </Badge>
+                  )}
+                  {viewingMemory.pinned && <Badge variant="outline" className="text-xs text-primary border-primary/30"><Pin className="h-3 w-3 mr-1" />已固定</Badge>}
+                  <span className="text-xs text-muted-foreground ml-auto">{new Date(viewingMemory.created_at).toLocaleString("zh-CN")}</span>
+                </div>
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <Markdown>{viewingMemory.content}</Markdown>
+                </div>
+                {viewingMemory.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-4 border-t border-border/50">
+                    {viewingMemory.tags.map((t) => (
+                      <span key={t} className="text-xs text-muted-foreground flex items-center gap-1 bg-muted px-2 py-1 rounded-md">
+                        <Tag className="h-3 w-3" />{t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 // ── Memory Card ───────────────────────────────────────────────────────────────
 
-function MemoryCard({ memory: m, onDelete, onPin }: {
+function MemoryCard({ memory: m, onDelete, onPin, onClick }: {
   memory: Memory;
   onDelete: (id: number) => void;
   onPin: (m: Memory) => void;
+  onClick: () => void;
 }) {
   const src = SOURCE_META[m.source] ?? SOURCE_META.manual;
 
   return (
-    <Card className={`group transition-all ${m.pinned ? "border-primary/30 bg-primary/5" : ""}`}>
+    <Card 
+      className={`group transition-all hover:border-primary/50 cursor-pointer ${m.pinned ? "border-primary/30 bg-primary/5" : ""}`}
+      onClick={onClick}
+    >
       <CardContent className="p-4">
         <div className="flex gap-3">
           <div className="flex-1 min-w-0">
-            <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{m.content}</p>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap break-words line-clamp-3">{m.content}</p>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <Badge variant="secondary" className={`text-[10px] h-4 px-1.5 ${src.color}`}>
                 {src.label}
@@ -293,13 +343,13 @@ function MemoryCard({ memory: m, onDelete, onPin }: {
           </div>
           <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
-              onClick={() => onPin(m)}
+              onClick={(e) => { e.stopPropagation(); onPin(m); }}
               className={`p-1.5 rounded-md hover:bg-accent transition-colors ${m.pinned ? "text-primary" : "text-muted-foreground"}`}
             >
               <Pin className="h-3.5 w-3.5" />
             </button>
             <button
-              onClick={() => onDelete(m.id)}
+              onClick={(e) => { e.stopPropagation(); onDelete(m.id); }}
               className="p-1.5 rounded-md hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors"
             >
               <Trash2 className="h-3.5 w-3.5" />
