@@ -4,7 +4,7 @@
  * Reads credentials from environment variables.  When running locally without
  * a Supabase instance the variables may be absent; in that case
  * `getSupabaseClient()` returns `null` and callers must handle that gracefully
- * (fall back to empty / mock data rather than throwing a 500).
+ * by using the Local SQLite environment instead.
  *
  * Supported env vars (set in .env.local):
  *   SUPABASE_URL              — your project URL

@@ -94,6 +94,29 @@ export default function SettingsPage() {
     }
   };
 
+  const [resetting, setResetting] = useState(false);
+
+  const handleReset = async () => {
+    if (!window.confirm("危险操作警告！\\n此操作将永久删除所有本地记忆、文档、错题、对话和设定，确认执行吗？")) {
+      return;
+    }
+    setResetting(true);
+    try {
+      const res = await fetch("/api/settings/reset", { method: "POST" });
+      const json = await res.json();
+      if (json.success) {
+        localStorage.clear();
+        window.location.href = "/";
+      } else {
+        alert("清空失败: " + json.error);
+      }
+    } catch (err) {
+      alert("清空失败: " + String(err));
+    } finally {
+      setResetting(false);
+    }
+  };
+
   if (loadingSettings) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -256,6 +279,30 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Danger Zone */}
+      <Card className="shadow-none border-red-500/20 bg-red-500/5 mt-8">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg flex items-center gap-2 text-red-600">
+            <XCircle className="h-5 w-5" />
+            危险区域 (Danger Zone)
+          </CardTitle>
+          <CardDescription className="text-red-600/80">
+            清空所有数据库表和文档，恢复系统至刚初始化的“干净白板”状态。此操作不可逆！
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="destructive"
+            onClick={handleReset}
+            disabled={resetting}
+            className="gap-2"
+          >
+            {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            一键清空数据库
+          </Button>
         </CardContent>
       </Card>
     </div>
