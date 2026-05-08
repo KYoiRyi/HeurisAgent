@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Markdown } from "@/components/ui/markdown";
 
 interface ReviewPlan {
@@ -76,6 +77,46 @@ export default function ReviewPage() {
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handleTaskToggle = async (planId: string, dayIndex: number, taskIndex: number, currentState: boolean) => {
+    setPlans((prevPlans) =>
+      prevPlans.map((plan) => {
+        if (plan.id !== planId) return plan;
+
+        const newSchedule = [...plan.schedule];
+        const day = { ...newSchedule[dayIndex] };
+        const tasks = [...day.tasks];
+
+        const taskItem = tasks[taskIndex];
+        const title = typeof taskItem === "object" ? taskItem.title : taskItem;
+
+        tasks[taskIndex] = { title, completed: !currentState } as any;
+        day.tasks = tasks;
+        newSchedule[dayIndex] = day;
+
+        let newCompleted = 0;
+        newSchedule.forEach((d) => {
+          d.tasks.forEach((t: any) => {
+            if (typeof t === "object" && t.completed) newCompleted++;
+          });
+        });
+
+        const newPlan = { ...plan, schedule: newSchedule, completed_tasks: newCompleted };
+
+        fetch("/api/review", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: planId,
+            schedule: newSchedule,
+            completed_tasks: newCompleted,
+          }),
+        }).catch((err) => console.error("Update task error:", err));
+
+        return newPlan;
+      })
+    );
   };
 
   const activePlan = plans.find((p) => p.status === "active");
@@ -215,12 +256,22 @@ export default function ReviewPage() {
                             <Badge variant="outline" className="text-[10px]">{day.duration_minutes} 分钟</Badge>
                           </div>
                           <ul className="space-y-1">
-                            {day.tasks.map((task, j) => (
-                              <li key={j} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <ArrowRight className="h-2.5 w-2.5 text-purple-400" />
-                                {task}
-                              </li>
-                            ))}
+                            {day.tasks.map((task: any, j: number) => {
+                              const isCompleted = typeof task === "object" ? task.completed : false;
+                              const title = typeof task === "object" ? task.title : task;
+                              return (
+                                <li key={j} className="flex items-start gap-2 text-xs text-muted-foreground mt-1">
+                                  <Checkbox checked={isCompleted} onCheckedChange={() => handleTaskToggle(activePlan.id, i, j, isCompleted)} className="mt-0.5 rounded-sm data-[state=checked]:bg-purple-500 data-[state=checked]:border-purple-500" />
+                                  <span className={isCompleted ? "line-through opacity-50" : ""}>{title}</span>
+                                </li>
+                              );
+                            })}
+
+
+
+
+
+
                           </ul>
                         </div>
                       </div>

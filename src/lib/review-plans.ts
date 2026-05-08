@@ -59,6 +59,29 @@ class ReviewPlanStore {
     return row ? toReviewPlan(row) : null;
   }
 
+  update(id: number, updates: { completed_tasks?: number; schedule?: string }): LocalReviewPlan | null {
+    const db = getDb();
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+
+    if (updates.completed_tasks !== undefined) {
+      sets.push("completed_tasks = ?");
+      vals.push(updates.completed_tasks);
+    }
+    if (updates.schedule !== undefined) {
+      sets.push("schedule = ?");
+      vals.push(updates.schedule);
+    }
+
+    if (sets.length === 0) return this.getById(id);
+
+    sets.push("updated_at = datetime('now')");
+    vals.push(id);
+
+    db.prepare(`UPDATE review_plans SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
+    return this.getById(id);
+  }
+
   list(opts: { subject?: string | null; status?: string | null; limit?: number } = {}): LocalReviewPlan[] {
     const conditions: string[] = [];
     const values: unknown[] = [];

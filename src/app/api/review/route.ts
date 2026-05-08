@@ -258,12 +258,62 @@ export async function POST(request: NextRequest) {
         planData,
         totalTasks,
       });
+
+      if (Array.isArray(planData.blind_spots) && planData.blind_spots.length > 0) {
+        try {
+          planData.blind_spots.forEach((spot) => {
+            memoryStore.add(`[复习智能体发现盲点] ${planSubject}：${spot}`, {
+              source: "review",
+              tags: ["blind-spot", "weakness", planSubject],
+              importance: 2,
+              pinned: true
+            });
+          });
+        } catch (err) {
+          console.error("[review] Local memory saving failed:", err);
+        }
+      }
     }
 
     return NextResponse.json({ success: true, data: savedPlan });
   } catch (error) {
     const message = error instanceof Error ? error.message : "服务器错误";
     console.error("[/api/review POST]", error);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+// 更新复习进度
+export async function PATCH(request: NextRequest) {
+  try {
+    const { id, completed_tasks, schedule } = await request.json();
+    if (!id) return NextResponse.json({ error: "缺少计划ID" }, { status: 400 });
+
+    const client = getSupabaseClient();
+    if (!client) {
+      // @ts-expect-error type missing until review-plans.ts is updated
+      const updated = reviewPlanStore.update(Number(id.replace("local-", "")), {
+        completed_tasks,
+        schedule: JSON.stringify(schedule)
+      });
+      return NextResponse.json({ success: true, data: updated });
+    }
+
+    const { data, error } = await client
+      .from("review_plans")
+      .update({
+        completed_tasks,
+        schedule,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id)
+      .select();
+
+    if (error) throw error;
+    return NextResponse.json({ success: true, data: data?.[0] });
+
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "服务器错误";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
