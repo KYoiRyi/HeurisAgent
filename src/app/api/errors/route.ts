@@ -289,6 +289,9 @@ function memoryToLocalError(memory: Memory) {
     .map((point) => point.trim())
     .filter(Boolean);
 
+  const masteredStr = readLocalField(memory.content, "掌握情况");
+  const reviewCountStr = readLocalField(memory.content, "复习次数");
+
   return {
     id: `local-${memory.id}`,
     student_name: readLocalField(memory.content, "学生") || "匿名学生",
@@ -302,8 +305,8 @@ function memoryToLocalError(memory: Memory) {
     difficulty: "medium",
     reinforcement_suggestions: readLocalField(memory.content, "强化建议") || null,
     status: readLocalField(memory.content, "状态") || "analyzed",
-    review_count: 0,
-    mastered: false,
+    review_count: reviewCountStr ? parseInt(reviewCountStr, 10) : 0,
+    mastered: masteredStr === "true",
     created_at: memory.created_at,
   };
 }
@@ -317,3 +320,75 @@ function normalizeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((item) => String(item).trim()).filter(Boolean);
 }
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, status, mastered, error_analysis, increment_review_count } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "缺少错题ID" }, { status: 400 });
+    }
+
+    const client = getSupabaseClient();
+    if (!client) {
+      // Local SQLite fallback via memory update
+      const numericId = parseInt(id.replace("local-", ""), 10);
+      if (isNaN(numericId)) return NextResponse.json({ error: "无效的本地ID" }, { status: 400 });
+
+      const memory = memoryStore.getById(numericId);
+      if (!memory) return NextResponse.json({ error: "找不到记录" }, { status: 404 });
+
+      let content = memory.content;
+      if (status) content = content.replace(/^状态：.*$/m, `状态：${status}`);
+      if (error_analysis) content = content.replace(/^错因分析：.*$/m, `错因分析：${error_analysis}`);
+      if (mastered !== undefined) {
+        if (!content.includes("掌握情况：")) {
+          content += `\n掌握情况：${mastered ? "true" : "false"}`;
+        } else {
+          content = content.replace(/^掌握情况：.*$/m, `掌握情况：${mastered ? "true" : "false"}`);
+        }
+      }
+
+      if (increment_review_count) {
+        const match = content.match(/^复习次数：(\d+)$/m);
+        const count = match ? parseInt(match[1], 10) : 0;
+        if (!content.includes("复习次数：")) {
+          content += `\n复习次数：${count + 1}`;
+        } else {
+          content = content.replace(/^复习次数：.*$/m, `复习次数：${count + 1}`);
+        }
+      }
+
+      memoryStore.update(numericId, { content });
+      return NextResponse.json({ success: true, data: memoryToLocalError(memoryStore.getById(numericId)!) });
+    }
+
+    // Supabase update
+    const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (status !== undefined) updateData.status = status;
+    if (mastered !== undefined) updateData.mastered = mastered;
+    if (error_analysis !== undefined) updateData.error_analysis = error_analysis;
+
+    if (increment_review_count) {
+       // We can fetch existing count first
+       const { data: existing } = await client.from("error_questions").select("review_count").eq("id", id).single();
+       updateData.review_count = (existing?.review_count || 0) + 1;
+    }
+
+    const { data, error } = await client
+      .from("error_questions")
+      .update(updateData)
+      .eq("id", id)
+      .select();
+
+    if (error) throw error;
+    return NextResponse.json({ success: true, data: data?.[0] });
+
+  } catch (error) {
+    console.error("[/api/errors PATCH]", error);
+    const message = error instanceof Error ? error.message : "服务器错误";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
