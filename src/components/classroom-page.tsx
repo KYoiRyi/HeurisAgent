@@ -373,6 +373,7 @@ export default function ClassroomPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isSimulatingRAG, setIsSimulatingRAG] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [selectedSubject, setSelectedSubject] = useState("物理");
   const [classroomResources, setClassroomResources] = useState<ClassroomResource[]>([]);
@@ -631,6 +632,11 @@ export default function ClassroomPage() {
     setMessages((prev) => [...prev, agentMessage]);
 
     try {
+      setIsSimulatingRAG(true);
+      // Fake RAG delay for dramatic effect before actual fetch
+      await new Promise((resolve) => setTimeout(resolve, 3200));
+      setIsSimulatingRAG(false);
+
       const response = await fetch("/api/classroom", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1240,6 +1246,7 @@ export default function ClassroomPage() {
                     </div>
                   );
                 })}
+                {isSimulatingRAG && <RagSimBlock subject={selectedSubject} />}
               </div>
             )}
             <div ref={scrollRef} className="h-4 shrink-0" />
@@ -1266,6 +1273,36 @@ export default function ClassroomPage() {
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
+    </div>
+  );
+}
+
+// ── RAG Simulation Block ───────────────────────────────────────────────────────
+
+function RagSimBlock({ subject }: { subject: string }) {
+  const [step, setStep] = useState(0);
+
+  const steps = [
+    `[Embedding] 正在向量化学生 Query...`,
+    `[FAISS] 连接全局 ${subject} 记忆向量库，扫描 10,204 维空间...`,
+    `[Semantic] 提取 Top-K 相关上下文节点 (相似度阈值 > 0.85)...`,
+        <Bot className="h-4 w-4" />
+      </div>
+      <div className="max-w-[85%] rounded-2xl px-5 py-3 text-[15px] leading-relaxed bg-background border overflow-hidden">
+        <div className="font-mono text-xs space-y-1.5 text-muted-foreground bg-neutral-950/5 dark:bg-neutral-900/50 p-3 rounded-md border border-neutral-200 dark:border-neutral-800">
+          <div className="flex items-center gap-2 mb-2 text-emerald-600 dark:text-emerald-400 font-semibold border-b border-border/50 pb-2">
+            <Terminal className="h-3.5 w-3.5" /> RAG Memory Search
+          </div>
+          {steps.slice(0, step).map((text, i) => (
+            <div key={i} className="flex items-center gap-2 animate-in fade-in slide-in-from-bottom-1">
+              <span className="text-emerald-500">➜</span>
+              <span>{text}</span>
+              {i < step - 1 && <span className="text-emerald-500 ml-auto">[OK]</span>}
+              {i === step - 1 && i < steps.length - 1 && <Loader2 className="h-3 w-3 animate-spin ml-auto" />}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
