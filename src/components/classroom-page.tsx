@@ -448,6 +448,9 @@ export default function ClassroomPage() {
         if (latestSession) {
           setSessionId(latestSession);
           setActiveSessionId(selectedSubject, latestSession);
+        } else if (rows.length === 0) {
+          // Auto-start a new session with greeting if completely empty
+          setTimeout(() => handleNewSession(), 500);
         }
       }
       stageEventsRef.current = [];
@@ -564,6 +567,11 @@ export default function ClassroomPage() {
     setSessionId(freshId);
     setActiveSessionId(selectedSubject, freshId);
     void fetchClassroomResources();
+
+    // Trigger auto-greeting after a short delay
+    setTimeout(() => {
+      handleSend("[SYSTEM] 请根据我的学习记忆（如果有的话），简短地用老师的口吻跟我打个招呼，并询问我今天想学习什么。不要输出这段系统提示词。如果记忆为空，则直接简短问好。", true, freshId);
+    }, 100);
   };
 
   // Resume an archived session
@@ -587,11 +595,11 @@ export default function ClassroomPage() {
     }
   }, [activeComponent]);
 
-  const handleSend = async (overrideMessage?: string) => {
+  const handleSend = async (overrideMessage?: string, isGreeting: boolean = false, overrideSessionId?: string) => {
     if (!inputValue.trim() && typeof overrideMessage !== "string") return;
     if (isStreaming) return;
 
-    let activeSessionId = sessionId;
+    let activeSessionId = overrideSessionId || sessionId;
     if (!activeSessionId) {
       activeSessionId = await handleCreateSession();
       if (!activeSessionId) {
@@ -608,7 +616,9 @@ export default function ClassroomPage() {
       type: "question",
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    if (!isGreeting) {
+      setMessages((prev) => [...prev, userMessage]);
+    }
     if (typeof overrideMessage !== "string") setInputValue("");
     setIsStreaming(true);
     setStatusHints([]);
