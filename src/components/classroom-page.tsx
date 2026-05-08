@@ -1286,6 +1286,20 @@ function RagSimBlock({ subject }: { subject: string }) {
     `[Embedding] 正在向量化学生 Query...`,
     `[FAISS] 连接全局 ${subject} 记忆向量库，扫描 10,204 维空间...`,
     `[Semantic] 提取 Top-K 相关上下文节点 (相似度阈值 > 0.85)...`,
+    `[Context] 命中知识盲点 2 项，近期错题 1 项，正在进行 Context 注入...`,
+    `[LLM] 知识加载完毕，开始启发式生成...`
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStep((s) => Math.min(s + 1, steps.length));
+    }, 600);
+    return () => clearInterval(interval);
+  }, [steps.length]);
+
+  return (
+    <div className="flex gap-3">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-1 bg-emerald-500 text-white">
         <Bot className="h-4 w-4" />
       </div>
       <div className="max-w-[85%] rounded-2xl px-5 py-3 text-[15px] leading-relaxed bg-background border overflow-hidden">
