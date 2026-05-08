@@ -382,7 +382,7 @@ export default function ClassroomPage() {
   const [stageEvents, setStageEvents] = useState<StageEvent[]>([]);
   const [statusHints, setStatusHints] = useState<string[]>([]);
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
-  const [showLogs, setShowLogs] = useState(true);
+  const [showLogs, setShowLogs] = useState(false);
   const [exerciseAnswers, setExerciseAnswers] = useState<Record<string, string>>({});
   const [exerciseProcesses, setExerciseProcesses] = useState<Record<string, string>>({});
   const [newClassroomArmed, setNewClassroomArmed] = useState(false);
@@ -463,6 +463,18 @@ export default function ClassroomPage() {
   useEffect(() => {
     fetchClassroomResources();
   }, [fetchClassroomResources]);
+
+  // Keyboard shortcut Ctrl+L to toggle logs
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        setShowLogs(v => !v);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // On mount / subject change: restore sessionId from localStorage, then fetch matching history
   useEffect(() => {
@@ -807,13 +819,7 @@ export default function ClassroomPage() {
             <Sparkles className="h-3.5 w-3.5" />
             只存知识点
           </Badge>
-          <Button
-            size="sm"
-            variant={showLogs ? "secondary" : "outline"}
-            onClick={() => setShowLogs((value) => !value)}
-          >
-            <Terminal className="h-3.5 w-3.5 mr-1" />日志
-          </Button>
+
           <Button
             size="sm"
             variant={showHistory ? "secondary" : "outline"}
