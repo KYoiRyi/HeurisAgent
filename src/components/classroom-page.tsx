@@ -4,12 +4,11 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   MessageSquareText, Send, Bot, User, Sparkles,
   Lightbulb, Loader2, FileText, RefreshCw, Wrench, CheckCircle2, XCircle, Terminal,
-  ChevronLeft, ChevronRight, PlusCircle, History, BookOpen
+  ChevronLeft, ChevronRight, PlusCircle, History, BookOpen, MessageCircle, X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
@@ -159,7 +158,7 @@ function buildStageSrcDoc(component: LiveComponent): string {
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <style>
-        html, body { margin: 0; padding: 0; min-height: 100vh; }
+        html, body { margin: 0; padding: 0; min-height: 100vh; overflow-x: hidden; }
         body { 
           font-family: system-ui, -apple-system, sans-serif; 
           display: flex;
@@ -169,7 +168,6 @@ function buildStageSrcDoc(component: LiveComponent): string {
         }
         #heuris-stage-container {
           margin: auto;
-          max-width: 100%;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -210,6 +208,31 @@ function buildStageSrcDoc(component: LiveComponent): string {
               message: event.reason && event.reason.message ? event.reason.message : String(event.reason)
             });
           });
+
+          // Auto-scale to perfectly fit the left-side grid (iframe viewport)
+          function autoScale() {
+            var container = document.getElementById("heuris-stage-container");
+            if (!container) return;
+            // Reset transform to measure intrinsic size
+            container.style.transform = "none";
+            container.style.marginBottom = "0px";
+            
+            var contentWidth = container.scrollWidth;
+            var contentHeight = container.scrollHeight;
+            var availableWidth = window.innerWidth - 32; // 1rem padding on each side
+            
+            if (contentWidth > availableWidth && availableWidth > 0) {
+              var scale = availableWidth / contentWidth;
+              container.style.transform = "scale(" + scale + ")";
+              container.style.transformOrigin = "top center";
+              // Adjust height so the left panel doesn't have huge empty space
+              container.style.marginBottom = "-" + (contentHeight * (1 - scale)) + "px";
+            }
+          }
+          window.addEventListener("resize", autoScale);
+          autoScale();
+          setTimeout(autoScale, 50);
+          setTimeout(autoScale, 500);
         })();
       </script>
       <script>
@@ -388,6 +411,7 @@ export default function ClassroomPage() {
   const [newClassroomArmed, setNewClassroomArmed] = useState(false);
   const [archivedSessions, setArchivedSessions] = useState<ArchivedSession[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(true);
   const newClassroomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stageEventsRef = useRef<StageEvent[]>([]);
@@ -450,7 +474,7 @@ export default function ClassroomPage() {
           setActiveSessionId(selectedSubject, latestSession);
         } else if (rows.length === 0) {
           // Auto-start a new session with greeting if completely empty
-          setTimeout(() => handleNewSession(), 500);
+          setTimeout(() => handleNewClassroom(), 500);
         }
       }
       stageEventsRef.current = [];
@@ -801,13 +825,7 @@ export default function ClassroomPage() {
   return (
     <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0 mb-2">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight flex items-center gap-3">
-            <MessageSquareText className="h-8 w-8 text-emerald-500" />
-            课堂互动智能体
-          </h1>
-        </div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-4 shrink-0 mb-2">
         <div className="flex items-center gap-2">
           <Select value={selectedSubject} onValueChange={setSelectedSubject} disabled={isStreaming}>
             <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
@@ -905,13 +923,24 @@ export default function ClassroomPage() {
       )}
 
 
-      {/* Main Split Layout */}
-      <ResizablePanelGroup orientation="horizontal" className="flex-1 rounded-lg border">
-        {/* Stage Pane */}
-        <ResizablePanel defaultSize={50} minSize={30} className="bg-background flex flex-col relative">
+      {/* Main Layout: Full Stage + Floating Chat Sidebar */}
+      <div className="relative flex-1 rounded-lg border overflow-hidden bg-background">
+        
+        {/* ================= STAGE PANE (Full Width) ================= */}
+        <div className="absolute inset-0 flex flex-col bg-background">
           <div className="flex items-center p-3 border-b shrink-0 bg-muted/30">
             <Bot className="h-4 w-4 mr-2 text-emerald-500" />
             <span className="text-sm font-semibold">互动黑板</span>
+            {/* Toggle Button for Chat */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto h-7 px-2 text-xs z-20"
+              onClick={() => setIsChatOpen(!isChatOpen)}
+            >
+              <MessageCircle className="h-3.5 w-3.5 mr-1" />
+              {isChatOpen ? "收起对话" : "展开对话"}
+            </Button>
           </div>
           <div className="border-b bg-background/80 px-3 py-2 shrink-0 min-w-0 w-full overflow-hidden">
             <div className="flex items-center gap-2">
@@ -1144,12 +1173,30 @@ export default function ClassroomPage() {
               <LogWindow logs={debugLogs} />
             </div>
           )}
-        </ResizablePanel>
+        </div>
 
-        <ResizableHandle withHandle />
+        {/* ================= CHAT PANE (Floating Drawer) ================= */}
+        <div
+          className={`absolute top-0 bottom-0 right-0 w-[400px] sm:w-[450px] bg-background/90 dark:bg-background/95 backdrop-blur-xl border-l shadow-2xl flex flex-col transition-transform duration-300 z-10 ${
+            isChatOpen ? "translate-x-0" : "translate-x-full"
+          }`}
+        >
+          {/* Drawer Header */}
+          <div className="flex items-center justify-between p-3 border-b shrink-0 bg-muted/20">
+            <div className="flex items-center text-sm font-semibold">
+              <MessageCircle className="h-4 w-4 mr-2 text-emerald-500" />
+              课堂对话
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 rounded-full"
+              onClick={() => setIsChatOpen(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
 
-        {/* Chat Pane */}
-        <ResizablePanel defaultSize={50} minSize={30} className="flex flex-col bg-muted/10">
           <div className="flex-1 overflow-y-auto p-4 flex flex-col">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-20">
@@ -1199,7 +1246,7 @@ export default function ClassroomPage() {
                       <div className={`max-w-[85%] rounded-2xl px-5 py-3 text-[15px] leading-relaxed ${
                         msg.role === "student"
                           ? "bg-primary text-primary-foreground"
-                          : "bg-background border prose prose-sm dark:prose-invert break-words"
+                          : "bg-background border prose prose-sm dark:prose-invert break-words shadow-sm"
                       }`}>
                         {msg.role === "student" && visibleContent.startsWith("[EXERCISE_SUBMISSION]") ? (
                           /* ── Exercise submission card ── */
@@ -1268,7 +1315,7 @@ export default function ClassroomPage() {
             <div ref={scrollRef} className="h-4 shrink-0" />
           </div>
           
-          <div className="p-3 bg-background border-t">
+          <div className="p-3 bg-background border-t shrink-0">
             <div className="flex gap-2">
               <Input
                 placeholder="输入你的问题..."
@@ -1276,7 +1323,7 @@ export default function ClassroomPage() {
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                 disabled={isStreaming}
-                className="flex-1"
+                className="flex-1 bg-muted/50"
               />
               <Button onClick={() => void handleSend()} disabled={isStreaming || !inputValue.trim()}>
                 {isStreaming ? (
@@ -1287,8 +1334,8 @@ export default function ClassroomPage() {
               </Button>
             </div>
           </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+        </div>
+      </div>
     </div>
   );
 }
