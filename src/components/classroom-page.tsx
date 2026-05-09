@@ -825,7 +825,13 @@ export default function ClassroomPage() {
   return (
     <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-4 shrink-0 mb-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0 mb-2">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight flex items-center gap-3">
+            <MessageSquareText className="h-8 w-8 text-emerald-500" />
+            课堂互动智能体
+          </h1>
+        </div>
         <div className="flex items-center gap-2">
           <Select value={selectedSubject} onValueChange={setSelectedSubject} disabled={isStreaming}>
             <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
