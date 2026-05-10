@@ -98,3 +98,7 @@ Desktop.ini
 .turbo
 
 .coze-logs
+data/
+*.db
+*.db-shm
+*.db-wal
