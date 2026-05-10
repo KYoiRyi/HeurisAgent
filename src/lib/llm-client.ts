@@ -198,6 +198,41 @@ export async function* llmStream(
 
 }
 
+/**
+ * SSE ReadableStream version of llmStream.
+ * Returns a ReadableStream that emits `data: {"content":"..."}\n\n` events,
+ * suitable for use as a Next.js Response body.
+ */
+export async function llmInvokeStream(
+  messages: ChatMessage[],
+  options: LLMOptions = {}
+): Promise<ReadableStream<Uint8Array>> {
+  const encoder = new TextEncoder();
+  const generator = llmStream(messages, options);
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { value, done } = await generator.next();
+        if (done) {
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+          return;
+        }
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ content: value })}\n\n`)
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "stream error";
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ error: message })}\n\n`)
+        );
+        controller.close();
+      }
+    },
+  });
+}
+
 /** Check if the LLM backend is reachable */
 export async function checkLLMHealth(): Promise<{
   ok: boolean;

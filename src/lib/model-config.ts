@@ -3,24 +3,28 @@
  *
  * Priority (highest → lowest):
  *   1. data/settings.json  (written by Settings UI)
- *   2. Environment variables: LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, LLM_PROVIDER
- *   3. Built-in defaults (local Ollama via openai-completions)
+ *   2. Built-in default: MiniMax OpenAI-compatible endpoint
  */
 import fs from "fs";
 import path from "path";
 import type { Api, Model } from "@/lib/pi-ai/index";
 
 export interface HeurisLLMSettings {
-  provider?: string;   // e.g. "openai", "anthropic", "google", "ollama", "openrouter"
-  baseUrl?: string;    // custom base URL (for Ollama or custom OpenAI-compat endpoints)
+  provider?: string;   // e.g. "openai", "minimax", "ollama"
+  baseUrl?: string;    // custom base URL
   apiKey?: string;
   model: string;       // model id string
 }
 
 const SETTINGS_PATH = path.join(process.cwd(), "data", "settings.json");
 
+// ─── Hardcoded defaults: MiniMax OpenAI-compatible ────────────────────────────
+const DEFAULT_PROVIDER = "minimax";
+const DEFAULT_BASE_URL = "https://api.minimax.chat/v1";
+const DEFAULT_API_KEY = "sk-cp-pAA1BuMfXYyblLgGP9prg2zO2xUY69HPHhdekBbvwff9-qgRYfDVo-6QouXYTihJm1_ZYtSnipxJau12DQkpGtsdnpO0HDu0udvhBxMlb3N_G0ne6YUYHoo";
+const DEFAULT_MODEL = "MiniMax-M1";
+
 function readSettings(): HeurisLLMSettings {
-  // 1. Try settings.json
   try {
     if (fs.existsSync(SETTINGS_PATH)) {
       const raw = fs.readFileSync(SETTINGS_PATH, "utf-8");
@@ -35,37 +39,28 @@ function readSettings(): HeurisLLMSettings {
       }
     }
   } catch {
-    // fall through to env vars
+    // fall through to defaults
   }
 
-  // 2. Env vars
   return {
-    provider: process.env.LLM_PROVIDER,
-    baseUrl: process.env.LLM_BASE_URL || (process.env.COZE_API_KEY ? "https://api.coze.cn/v1" : undefined),
-    apiKey: process.env.LLM_API_KEY || process.env.COZE_API_KEY,
-    model: process.env.LLM_MODEL || "bot_id_placeholder",
+    provider: DEFAULT_PROVIDER,
+    baseUrl: DEFAULT_BASE_URL,
+    apiKey: DEFAULT_API_KEY,
+    model: DEFAULT_MODEL,
   };
 }
 
 /**
  * Maps a provider name + baseUrl to a pi-ai Api type.
- * OpenAI-completions covers Ollama, OpenAI, DeepSeek, Groq, OpenRouter, etc.
+ * MiniMax and most providers use the OpenAI-completions compatible format.
  */
-function resolveApi(provider?: string, baseUrl?: string): Api {
-  if (!provider && baseUrl) {
-    // Auto-detect from URL
-    if (baseUrl.includes("anthropic")) return "anthropic-messages";
-    if (baseUrl.includes("googleapis") || baseUrl.includes("generativelanguage")) return "google-generative-ai";
-    if (baseUrl.includes("mistral")) return "mistral-conversations";
-    return "openai-completions";
-  }
-
+function resolveApi(provider?: string, _baseUrl?: string): Api {
   const normalized = (provider ?? "").toLowerCase();
   if (normalized === "anthropic") return "anthropic-messages";
   if (normalized === "google" || normalized === "gemini") return "google-generative-ai";
   if (normalized === "mistral") return "mistral-conversations";
   if (normalized === "openai-responses") return "openai-responses";
-  // For Coze and everything else (openai, deepseek, groq, openrouter, etc.) use openai-completions
+  // MiniMax, OpenAI, DeepSeek, Ollama, Coze — all use openai-completions
   return "openai-completions";
 }
 
@@ -83,15 +78,13 @@ function resolveBaseUrl(api: Api, provider?: string, customBaseUrl?: string): st
   if (p === "groq") return "https://api.groq.com/openai/v1";
   if (p === "openrouter") return "https://openrouter.ai/api/v1";
   if (p === "openai") return "https://api.openai.com/v1";
-  if (p === "coze") return "https://api.coze.cn/v1";
-  // Default: local Ollama fallback if nothing is configured
-  return "http://localhost:11434/v1";
+  if (p === "minimax") return DEFAULT_BASE_URL;
+  // Default: MiniMax
+  return DEFAULT_BASE_URL;
 }
 
 /**
  * Build a pi-ai Model<Api> from the current settings.
- * Returns a "dynamic" model definition that works with openai-completions
- * even for unknown model IDs (Ollama local models, custom endpoints).
  */
 export function getActiveModel(): Model<Api> {
   const settings = readSettings();
@@ -102,14 +95,14 @@ export function getActiveModel(): Model<Api> {
     id: settings.model,
     name: settings.model,
     api,
-    provider: settings.provider ?? (baseUrl.includes("localhost") ? "ollama" : "custom"),
+    provider: settings.provider ?? DEFAULT_PROVIDER,
     baseUrl,
     reasoning: false,
     input: ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 128_000,
+    contextWindow: 1_000_000,
     maxTokens: 8_192,
-    headers: settings.apiKey ? undefined : undefined,
+    headers: undefined,
   } satisfies Model<Api>;
 }
 
@@ -118,7 +111,7 @@ export function getActiveModel(): Model<Api> {
  */
 export function getActiveApiKey(): string {
   const settings = readSettings();
-  return settings.apiKey || "ollama";
+  return settings.apiKey || DEFAULT_API_KEY;
 }
 
 /**

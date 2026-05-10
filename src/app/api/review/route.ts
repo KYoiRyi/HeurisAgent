@@ -291,7 +291,6 @@ export async function PATCH(request: NextRequest) {
 
     const client = getSupabaseClient();
     if (!client) {
-      // @ts-expect-error type missing until review-plans.ts is updated
       const updated = reviewPlanStore.update(Number(id.replace("local-", "")), {
         completed_tasks,
         schedule: JSON.stringify(schedule)

@@ -22,7 +22,7 @@ interface ReviewPlan {
   plan_title: string;
   plan_content: string;
   blind_spots: string[];
-  schedule: Array<{ day: string; tasks: string[]; duration_minutes: number }>;
+  schedule: Array<{ day: string; tasks: Array<string | { title: string; completed?: boolean }>; duration_minutes: number }>;
   priority_topics: Array<{ topic: string; priority: string; reason: string }>;
   review_strategy: string;
   progress: number;
