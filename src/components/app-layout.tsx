@@ -26,18 +26,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mounted, setMounted] = useState(false);
-  const [llmOk, setLlmOk] = useState<boolean | null>(null);
-  const [llmModel, setLlmModel] = useState("");
-
   useEffect(() => {
     setMounted(true);
-    fetch("/api/v1/health")
-      .then((r) => r.json())
-      .then((d) => {
-        setLlmOk(d.services?.llm?.ok ?? false);
-        setLlmModel(d.services?.llm?.model || "");
-      })
-      .catch(() => setLlmOk(false));
   }, []);
 
   if (!mounted) {
@@ -115,27 +105,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* LLM Status */}
-        {sidebarOpen && (
-          <div className="absolute bottom-0 left-0 right-0 border-t p-4 bg-background">
-            <Link href="/settings" className="block rounded-xl bg-muted/50 p-3 hover:bg-muted transition-colors">
-              <div className="flex items-center gap-2 mb-1.5">
-                <Bot className="h-4 w-4 text-primary" />
-                <span className="text-xs font-semibold">AI 提供商</span>
-                <div className={cn(
-                  "ml-auto h-2 w-2 rounded-full",
-                  llmOk === null ? "bg-yellow-400 animate-pulse" :
-                  llmOk ? "bg-emerald-500 animate-pulse" : "bg-red-500"
-                )} />
-              </div>
-              <p className="text-[10px] text-muted-foreground truncate">
-                {llmOk === null ? "检测中…" :
-                 llmOk ? ("✓ 已连接" + (llmModel ? " · " + llmModel : "")) :
-                 "⚠ LLM 未连接 — 点击配置"}
-              </p>
-            </Link>
-          </div>
-        )}
+
       </aside>
 
       {/* Main Content */}
@@ -155,13 +125,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </span>
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <Badge
-              variant={llmOk === false ? "destructive" : "outline"}
-              className="text-xs"
-            >
-              <Bot className="h-3 w-3 mr-1" />
-              {llmOk === null ? "检测中" : llmOk ? "AI 在线" : "AI 离线"}
-            </Badge>
+            {/* Additional header actions can be placed here */}
           </div>
         </header>
 

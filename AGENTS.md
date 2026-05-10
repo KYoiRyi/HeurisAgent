@@ -11,7 +11,7 @@
 - **Language**: TypeScript 5
 - **UI 组件**: shadcn/ui (基于 Radix UI)
 - **Styling**: Tailwind CSS 4
-- **数据库**: Supabase (PostgreSQL)
+- **数据库**: 本地 SQLite (better-sqlite3 + FTS5)
 - **LLM**: coze-coding-dev-sdk (豆包 Seed 系列)
 
 ## 目录结构
@@ -46,7 +46,7 @@
 │   │   ├── monitor-page.tsx        # 智能体监控组件
 │   │   └── ui/                     # shadcn/ui 组件库
 │   ├── storage/database/           # 数据库
-│   │   ├── supabase-client.ts      # Supabase 客户端
+│   │   ├── db-client.ts            # 本地数据库客户端
 │   │   └── shared/schema.ts        # Drizzle Schema
 │   ├── hooks/                      # 自定义 Hooks
 │   └── lib/utils.ts                # 工具函数
@@ -93,5 +93,5 @@
 - TypeScript strict 模式，禁止隐式 any
 - LLM 消息角色类型显式声明: `{ role: "system" | "user" | "assistant"; content: string }`
 - SSE 流式响应: Content-Type 为 `text/event-stream`
-- Supabase 使用 service_role_key 后端访问，RLS 已启用
+- 数据库已完全切换为本地模式，支持断网环境单机运行
 - 组件使用 'use client' + useEffect/useState 避免 hydration 问题

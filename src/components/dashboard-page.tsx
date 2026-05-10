@@ -36,6 +36,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface DashboardData {
   overview: {
@@ -69,9 +71,9 @@ interface DashboardData {
     }>;
   };
   learningProfile: {
-    knowledgePoints: string[];
-    weakPoints: string[];
-    recentTopics: string[];
+    knowledgePoints: { id: string; title: string; content: string; sourceType: string; createdAt?: string }[];
+    weakPoints: { id: string; title: string; content: string; sourceType: string; createdAt?: string }[];
+    recentTopics: { id: string; title: string; content: string; sourceType: string; createdAt?: string }[];
     strongestSubject: string;
     activityScore: number;
   };
@@ -595,13 +597,13 @@ function PortraitSection({
   icon: LucideIcon;
   title: string;
   empty: string;
-  items: string[];
+  items: { id: string; title: string; content: string; sourceType: string; createdAt?: string }[];
   tone: "cyan" | "orange" | "emerald";
 }) {
   const color = {
-    cyan: "border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
-    orange: "border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300",
-    emerald: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    cyan: "border-cyan-500/30 bg-cyan-500/10 text-cyan-700 hover:bg-cyan-500/20 dark:text-cyan-300",
+    orange: "border-orange-500/30 bg-orange-500/10 text-orange-700 hover:bg-orange-500/20 dark:text-orange-300",
+    emerald: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300",
   }[tone];
 
   return (
@@ -613,9 +615,29 @@ function PortraitSection({
       {items.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {items.slice(0, 8).map((item) => (
-            <Badge key={item} variant="outline" className={cn("max-w-full truncate", color)}>
-              {item}
-            </Badge>
+            <Dialog key={item.id}>
+              <DialogTrigger asChild>
+                <Badge variant="outline" className={cn("max-w-full truncate cursor-pointer transition-colors", color)}>
+                  {item.title}
+                </Badge>
+              </DialogTrigger>
+              <DialogContent className="max-w-xl">
+                <DialogHeader>
+                  <DialogTitle className="text-xl flex items-center gap-2">
+                    <Icon className="h-5 w-5 text-primary" />
+                    {title}详情
+                  </DialogTitle>
+                  <DialogDescription>
+                    来源：{item.sourceType} {item.createdAt ? `· ${formatDate(item.createdAt)}` : ""}
+                  </DialogDescription>
+                </DialogHeader>
+                <ScrollArea className="mt-4 max-h-[60vh] rounded-md border p-4">
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+                    {item.content}
+                  </div>
+                </ScrollArea>
+              </DialogContent>
+            </Dialog>
           ))}
         </div>
       ) : (

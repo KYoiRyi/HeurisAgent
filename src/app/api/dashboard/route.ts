@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
 import { getDb } from "@/lib/db";
 
+export interface DashboardTopic {
+  id: string;
+  title: string;
+  content: string;
+  sourceType: string;
+  createdAt?: string;
+}
+
 interface DashboardResponseData {
   overview: {
     totalResources: number;
@@ -29,9 +37,9 @@ interface DashboardResponseData {
   };
   dailyStats: Record<string, { classroom: number; error: number; review: number; resource: number }>;
   learningProfile: {
-    knowledgePoints: string[];
-    weakPoints: string[];
-    recentTopics: string[];
+    knowledgePoints: DashboardTopic[];
+    weakPoints: DashboardTopic[];
+    recentTopics: DashboardTopic[];
     strongestSubject: string;
     activityScore: number;
   };
@@ -244,20 +252,67 @@ function buildLocalDashboard(): DashboardResponseData {
     ...resources.map((row) => ({ record_type: "resource", created_at: row.created_at })),
   ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 30);
 
-  const knowledgePoints = unique([
-    ...knowledgeMemories.flatMap((memory) => extractKnowledgePoints(memory.content, memory.tags)),
-    ...classroom.flatMap((row) => parseStringArray(row.related_knowledge_points)),
-    ...resources.flatMap((row) => parseStringArray(row.tags)),
-  ]).filter((point) => point !== "knowledge-point").slice(0, 12);
-  const weakPoints = unique([
-    ...weaknessMemories.map((memory) => readMemoryField(memory.content, "知识点") || readMemoryField(memory.content, "题目") || memory.content),
-    ...plans.flatMap((plan) => parseStringArray(plan.blind_spots)),
-  ]).map((item) => compact(item, 24)).slice(0, 8);
-  const recentTopics = unique([
-    ...resources.map((resource) => resource.title),
-    ...knowledgePoints,
-    ...plans.flatMap((plan) => parsePriorityTopics(plan.priority_topics)),
-  ]).map((item) => compact(item, 18)).slice(0, 8);
+  const kpMap = new Map<string, DashboardTopic>();
+  for (const memory of knowledgeMemories) {
+    const points = extractKnowledgePoints(memory.content, memory.tags);
+    for (const pt of points) {
+      if (pt === "knowledge-point") continue;
+      const title = compact(pt, 24);
+      if (!kpMap.has(title)) kpMap.set(title, { id: "kp-mem-" + Math.random(), title, content: memory.content, sourceType: "错题记忆智能体", createdAt: memory.created_at });
+    }
+  }
+  for (const row of classroom) {
+    const points = parseStringArray(row.related_knowledge_points);
+    for (const pt of points) {
+      if (pt === "knowledge-point") continue;
+      const title = compact(pt, 24);
+      if (!kpMap.has(title)) kpMap.set(title, { id: "kp-class-" + Math.random(), title, content: `科目：${row.subject}\n角色：${row.role}\n知识点：${pt}`, sourceType: "课堂互动智能体", createdAt: row.created_at });
+    }
+  }
+  for (const row of resources) {
+    const points = parseStringArray(row.tags);
+    for (const pt of points) {
+      if (pt === "knowledge-point") continue;
+      const title = compact(pt, 24);
+      if (!kpMap.has(title)) kpMap.set(title, { id: "kp-res-" + Math.random(), title, content: `资源名称：${row.title}\n类型：${row.category}`, sourceType: "教学资料", createdAt: row.created_at });
+    }
+  }
+  const knowledgePoints = Array.from(kpMap.values()).slice(0, 12);
+
+  const weakMap = new Map<string, DashboardTopic>();
+  for (const memory of weaknessMemories) {
+    const rawTitle = readMemoryField(memory.content, "知识点") || readMemoryField(memory.content, "题目") || memory.content;
+    const title = compact(rawTitle, 24);
+    if (!weakMap.has(title)) {
+      weakMap.set(title, { id: "weak-mem-" + Math.random(), title, content: memory.content, sourceType: "错题记忆智能体", createdAt: memory.created_at });
+    }
+  }
+  for (const plan of plans) {
+    for (const spot of parseStringArray(plan.blind_spots)) {
+      const title = compact(spot, 24);
+      if (!weakMap.has(title)) {
+        weakMap.set(title, { id: "weak-plan-" + Math.random(), title, content: `计划名称：${plan.plan_title}\n复习盲点：${spot}`, sourceType: "复习策略智能体", createdAt: plan.created_at });
+      }
+    }
+  }
+  const weakPoints = Array.from(weakMap.values()).slice(0, 8);
+
+  const topicMap = new Map<string, DashboardTopic>();
+  for (const row of resources) {
+    const title = compact(row.title, 18);
+    if (!topicMap.has(title)) topicMap.set(title, { id: "top-res-" + Math.random(), title, content: `资源名称：${row.title}\n科目：${row.subject}\n类型：${row.category}`, sourceType: "教学资料", createdAt: row.created_at });
+  }
+  for (const kp of knowledgePoints) {
+    const title = compact(kp.title, 18);
+    if (!topicMap.has(title)) topicMap.set(title, { ...kp, id: "top-kp-" + Math.random(), title });
+  }
+  for (const plan of plans) {
+    for (const topic of parsePriorityTopics(plan.priority_topics)) {
+      const title = compact(topic, 18);
+      if (!topicMap.has(title)) topicMap.set(title, { id: "top-plan-" + Math.random(), title, content: `计划名称：${plan.plan_title}\n复习重点：${topic}`, sourceType: "复习策略智能体", createdAt: plan.created_at });
+    }
+  }
+  const recentTopics = Array.from(topicMap.values()).slice(0, 8);
 
   const strongestSubject = Object.entries(subjectStats).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "通用";
   const totalActivity = classroom.length + resources.length + errorMemories.length + plans.length;
@@ -364,9 +419,15 @@ function mergeDashboardData(local: DashboardResponseData, remote: DashboardRespo
       activePlans: [...remote.studentData.activePlans, ...local.studentData.activePlans],
     },
     learningProfile: {
-      knowledgePoints: unique([...remote.learningProfile.knowledgePoints, ...local.learningProfile.knowledgePoints]).slice(0, 12),
-      weakPoints: unique([...remote.learningProfile.weakPoints, ...local.learningProfile.weakPoints]).slice(0, 8),
-      recentTopics: unique([...remote.learningProfile.recentTopics, ...local.learningProfile.recentTopics]).slice(0, 8),
+      knowledgePoints: unique([...remote.learningProfile.knowledgePoints.map(k => k.title), ...local.learningProfile.knowledgePoints.map(k => k.title)])
+        .map(title => [...remote.learningProfile.knowledgePoints, ...local.learningProfile.knowledgePoints].find(k => k.title === title)!)
+        .slice(0, 12),
+      weakPoints: unique([...remote.learningProfile.weakPoints.map(k => k.title), ...local.learningProfile.weakPoints.map(k => k.title)])
+        .map(title => [...remote.learningProfile.weakPoints, ...local.learningProfile.weakPoints].find(k => k.title === title)!)
+        .slice(0, 8),
+      recentTopics: unique([...remote.learningProfile.recentTopics.map(k => k.title), ...local.learningProfile.recentTopics.map(k => k.title)])
+        .map(title => [...remote.learningProfile.recentTopics, ...local.learningProfile.recentTopics].find(k => k.title === title)!)
+        .slice(0, 8),
       strongestSubject: local.learningProfile.strongestSubject !== "通用" ? local.learningProfile.strongestSubject : remote.learningProfile.strongestSubject,
       activityScore: Math.max(remote.learningProfile.activityScore, local.learningProfile.activityScore),
     },
@@ -380,9 +441,9 @@ function buildRemoteLearningProfile(
 ) {
   const strongestSubject = Object.entries(subjectStats).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "通用";
   return {
-    knowledgePoints: Object.keys(subjectStats),
-    weakPoints: Object.keys(errorTypeStats),
-    recentTopics: studentData.activePlans.map((plan) => plan.plan_title),
+    knowledgePoints: Object.keys(subjectStats).map(subject => ({ id: "rem-" + Math.random(), title: subject, content: `关联学科：${subject}`, sourceType: "Supabase" })),
+    weakPoints: Object.keys(errorTypeStats).map(type => ({ id: "rem-err-" + Math.random(), title: type, content: `错误类型：${type}`, sourceType: "Supabase" })),
+    recentTopics: studentData.activePlans.map((plan) => ({ id: "rem-plan-" + Math.random(), title: plan.plan_title, content: `活跃复习计划：${plan.plan_title}`, sourceType: "Supabase" })),
     strongestSubject,
     activityScore: Math.min(100, Object.values(subjectStats).reduce((sum, value) => sum + value, 0) * 8),
   };

@@ -15,6 +15,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: Pull latest code from git
+echo [INFO] Pulling latest code...
+git pull
+
 :: Install deps if needed
 if not exist node_modules\.bin\next.cmd (
     echo [INFO] Installing production dependencies...
@@ -26,30 +30,24 @@ if not exist node_modules\.bin\next.cmd (
     )
 )
 
-:: Build if needed
-if not exist .next (
-    echo [INFO] Production build not found. Building...
-    pnpm build
-    if errorlevel 1 (
-        echo [ERROR] Build failed.
-        pause
-        exit /b 1
-    )
-) else (
-    echo [INFO] Production build found.
-    echo [INFO] Note: If you updated the code, please delete the .next folder or run "pnpm build" manually before starting.
+:: Build production (Always build latest)
+echo [INFO] Cleaning old build...
+if exist .next rmdir /s /q .next
+echo [INFO] Building production...
+pnpm build
+if errorlevel 1 (
+    echo [ERROR] Build failed.
+    pause
+    exit /b 1
 )
 
 :: For standalone mode, copy static assets so they are served correctly
 if exist .next\standalone (
-    if not exist .next\standalone\public (
-        echo [INFO] Copying public folder to standalone...
-        xcopy /E /I /Q public .next\standalone\public >nul 2>nul
-    )
-    if not exist .next\standalone\.next\static (
-        echo [INFO] Copying static folder to standalone...
-        xcopy /E /I /Q .next\static .next\standalone\.next\static >nul 2>nul
-    )
+    echo [INFO] Copying public folder to standalone...
+    xcopy /E /I /Q /Y public .next\standalone\public >nul 2>nul
+    
+    echo [INFO] Copying static folder to standalone...
+    xcopy /E /I /Q /Y .next\static .next\standalone\.next\static >nul 2>nul
 )
 
 :: Kill anything already on port 5000

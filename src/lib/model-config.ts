@@ -41,9 +41,9 @@ function readSettings(): HeurisLLMSettings {
   // 2. Env vars
   return {
     provider: process.env.LLM_PROVIDER,
-    baseUrl: process.env.LLM_BASE_URL,
-    apiKey: process.env.LLM_API_KEY,
-    model: process.env.LLM_MODEL || "qwen2.5:7b",
+    baseUrl: process.env.LLM_BASE_URL || (process.env.COZE_API_KEY ? "https://api.coze.cn/v1" : undefined),
+    apiKey: process.env.LLM_API_KEY || process.env.COZE_API_KEY,
+    model: process.env.LLM_MODEL || "bot_id_placeholder",
   };
 }
 
@@ -65,7 +65,7 @@ function resolveApi(provider?: string, baseUrl?: string): Api {
   if (normalized === "google" || normalized === "gemini") return "google-generative-ai";
   if (normalized === "mistral") return "mistral-conversations";
   if (normalized === "openai-responses") return "openai-responses";
-  // Everything else (openai, ollama, deepseek, groq, openrouter, etc.) uses openai-completions
+  // For Coze and everything else (openai, deepseek, groq, openrouter, etc.) use openai-completions
   return "openai-completions";
 }
 
@@ -83,7 +83,8 @@ function resolveBaseUrl(api: Api, provider?: string, customBaseUrl?: string): st
   if (p === "groq") return "https://api.groq.com/openai/v1";
   if (p === "openrouter") return "https://openrouter.ai/api/v1";
   if (p === "openai") return "https://api.openai.com/v1";
-  // Default: local Ollama
+  if (p === "coze") return "https://api.coze.cn/v1";
+  // Default: local Ollama fallback if nothing is configured
   return "http://localhost:11434/v1";
 }
 
