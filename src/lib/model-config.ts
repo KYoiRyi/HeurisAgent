@@ -20,9 +20,9 @@ const SETTINGS_PATH = path.join(process.cwd(), "data", "settings.json");
 
 // ─── Hardcoded defaults: MiniMax OpenAI-compatible ────────────────────────────
 const DEFAULT_PROVIDER = "minimax";
-const DEFAULT_BASE_URL = "https://api.minimax.chat/v1";
+const DEFAULT_BASE_URL = "https://api.minimaxi.com/v1";
 const DEFAULT_API_KEY = "sk-cp-pAA1BuMfXYyblLgGP9prg2zO2xUY69HPHhdekBbvwff9-qgRYfDVo-6QouXYTihJm1_ZYtSnipxJau12DQkpGtsdnpO0HDu0udvhBxMlb3N_G0ne6YUYHoo";
-const DEFAULT_MODEL = "MiniMax-M1";
+const DEFAULT_MODEL = "MiniMax-M2.5-highspeed";
 
 function readSettings(): HeurisLLMSettings {
   try {
