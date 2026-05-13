@@ -406,8 +406,8 @@ export default function ClassroomPage() {
   const [statusHints, setStatusHints] = useState<string[]>([]);
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
   const [showLogs, setShowLogs] = useState(false);
-  const [exerciseAnswers, setExerciseAnswers] = useState<Record<string, string>>({});
-  const [exerciseProcesses, setExerciseProcesses] = useState<Record<string, string>>({});
+  // Key: resourceId → (subIndex → answer).  subIndex 0 = single-question answer.
+  const [exerciseAnswers, setExerciseAnswers] = useState<Record<string, Record<number, string>>>({});
   const [newClassroomArmed, setNewClassroomArmed] = useState(false);
   const [archivedSessions, setArchivedSessions] = useState<ArchivedSession[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -607,7 +607,6 @@ export default function ClassroomPage() {
     setStatusHints([]);
     setDebugLogs([]);
     setExerciseAnswers({});
-    setExerciseProcesses({});
     setSelectedResourceId(null);
     setInputValue("");
     setIsStreaming(false);
@@ -1144,62 +1143,99 @@ export default function ClassroomPage() {
                         <span className="text-sm font-semibold">答题区</span>
                         <Badge variant="outline" className="text-[10px]">答完后提交，AI 自动批改并录入错题本</Badge>
                       </div>
-                      {/^[A-D][.。]\s/m.test(selectedResource.content ?? "") ? (
-                        <div className="space-y-2">
-                          <label className="text-xs text-muted-foreground block">选择答案：</label>
-                          <div className="grid grid-cols-2 gap-2">
-                            {["A", "B", "C", "D"].map((opt) => (
-                              <button
-                                key={opt}
-                                onClick={() => setExerciseAnswers((prev) => ({ ...prev, [selectedResource.id]: opt }))}
-                                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors text-left ${
-                                  exerciseAnswers[selectedResource.id] === opt
-                                    ? "border-cyan-500 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
-                                    : "border-border hover:border-cyan-400 hover:bg-accent"
-                                }`}
-                              >{opt}</button>
-                            ))}
+                      {(() => {
+                        const content = selectedResource.content ?? "";
+                        const rid = selectedResource.id;
+                        const subQMap = exerciseAnswers[rid] ?? {};
+
+                        // ── Detect question type ──────────────────────────────
+                        // 1) Multiple-choice: has A. / A。 options
+                        const isMultipleChoice = /^[A-D][.。]\s/m.test(content);
+                        // 2) Multi-part: has **(1)** / (1) / （1） markers
+                        const subQMatches = [...content.matchAll(/\*{0,2}\((\d+)\)\*{0,2}/g)];
+                        const subCount = subQMatches.length;
+                        const isMultiPart = subCount >= 2;
+
+                        const setAnswer = (idx: number, val: string) =>
+                          setExerciseAnswers((prev) => ({
+                            ...prev,
+                            [rid]: { ...(prev[rid] ?? {}), [idx]: val },
+                          }));
+
+                        // Build submission message from current answers
+                        const buildSubmissionMsg = () => {
+                          if (isMultipleChoice) {
+                            return `[EXERCISE_SUBMISSION]\n\n题目：《${selectedResource.title}》\n\n题目内容：\n${content}\n\n【我的答案】\n${subQMap[0] ?? ""}\n\n请批改，并将结果录入错题本。`;
+                          }
+                          if (isMultiPart) {
+                            const parts = Array.from({ length: subCount }, (_, i) =>
+                              `第(${i + 1})问：${subQMap[i] ?? "（未作答）"}`
+                            ).join("\n");
+                            return `[EXERCISE_SUBMISSION]\n\n题目：《${selectedResource.title}》\n\n题目内容：\n${content}\n\n【我的答案】\n${parts}\n\n请批改每一小问，并将结果录入错题本。`;
+                          }
+                          return `[EXERCISE_SUBMISSION]\n\n题目：《${selectedResource.title}》\n\n题目内容：\n${content}\n\n【我的答案】\n${subQMap[0] ?? ""}\n\n请批改，并将结果录入错题本。`;
+                        };
+
+                        const hasAnyAnswer = Object.values(subQMap).some((v) => v.trim() !== "");
+
+                        return (
+                          <div className="space-y-3">
+                            {isMultipleChoice ? (
+                              // ── 选择题 ──────────────────────────────
+                              <div className="space-y-2">
+                                <label className="text-xs text-muted-foreground block">选择答案：</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {["A", "B", "C", "D"].map((opt) => (
+                                    <button
+                                      key={opt}
+                                      onClick={() => setAnswer(0, opt)}
+                                      className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors text-left ${
+                                        subQMap[0] === opt
+                                          ? "border-cyan-500 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
+                                          : "border-border hover:border-cyan-400 hover:bg-accent"
+                                      }`}
+                                    >{opt}</button>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : isMultiPart ? (
+                              // ── 多小问题：每问独立输入框 ──────────────────────
+                              <div className="space-y-3">
+                                {Array.from({ length: subCount }, (_, i) => (
+                                  <div key={i} className="flex items-center gap-2">
+                                    <span className="shrink-0 w-14 text-xs font-semibold text-muted-foreground">第({i + 1})问</span>
+                                    <Input
+                                      placeholder={`第(${i + 1})问答案...`}
+                                      value={subQMap[i] ?? ""}
+                                      onChange={(e) => setAnswer(i, e.target.value)}
+                                      className="flex-1 h-9 text-sm"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              // ── 单问简答/计算 ──────────────────────────────
+                              <div>
+                                <label className="text-xs text-muted-foreground block mb-1">我的答案：</label>
+                                <Input
+                                  placeholder="请输入答案..."
+                                  value={subQMap[0] ?? ""}
+                                  onChange={(e) => setAnswer(0, e.target.value)}
+                                />
+                              </div>
+                            )}
+
+                            <Button
+                              className="w-full"
+                              onClick={() => handleSend(buildSubmissionMsg())}
+                              disabled={!hasAnyAnswer || isStreaming}
+                            >
+                              <Send className="h-4 w-4 mr-2" />
+                              提交批改（自动录入错题本）
+                            </Button>
                           </div>
-                          <label className="text-xs text-muted-foreground block mt-2">解题思路（可选）：</label>
-                          <textarea
-                            className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                            placeholder="说说你为什么选这个选项..."
-                            value={exerciseProcesses[selectedResource.id] || ""}
-                            onChange={(e) => setExerciseProcesses((prev) => ({ ...prev, [selectedResource.id]: e.target.value }))}
-                          />
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <label className="text-xs text-muted-foreground block">我的答案：</label>
-                          <Input
-                            placeholder="请输入最终答案..."
-                            value={exerciseAnswers[selectedResource.id] || ""}
-                            onChange={(e) => setExerciseAnswers((prev) => ({ ...prev, [selectedResource.id]: e.target.value }))}
-                          />
-                          <label className="text-xs text-muted-foreground block">解题过程/思路：</label>
-                          <textarea
-                            className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                            placeholder="请完整写出解题过程..."
-                            value={exerciseProcesses[selectedResource.id] || ""}
-                            onChange={(e) => setExerciseProcesses((prev) => ({ ...prev, [selectedResource.id]: e.target.value }))}
-                          />
-                        </div>
-                      )}
-                      <Button
-                        className="w-full"
-                        onClick={() => {
-                          const ans = exerciseAnswers[selectedResource.id] || "";
-                          const proc = exerciseProcesses[selectedResource.id] || "";
-                          if (!ans && !proc) return;
-                          handleSend(
-                            `[EXERCISE_SUBMISSION]\n\n题目：《${selectedResource.title}》\n\n题目内容：\n${selectedResource.content ?? ""}\n\n【我的答案】\n${ans}\n\n【解题过程/思路】\n${proc}\n\n请批改，并将结果录入错题本。`
-                          );
-                        }}
-                        disabled={(!exerciseAnswers[selectedResource.id] && !exerciseProcesses[selectedResource.id]) || isStreaming}
-                      >
-                        <Send className="h-4 w-4 mr-2" />
-                        提交批改（自动录入错题本）
-                      </Button>
+                        );
+                      })()}
                     </div>
                   </div>
                 ) : (
