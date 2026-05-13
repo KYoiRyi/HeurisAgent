@@ -412,6 +412,10 @@ export default function ClassroomPage() {
   const [archivedSessions, setArchivedSessions] = useState<ArchivedSession[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(true);
+  // Track whether we need to auto-greet on first load (avoids circular useEffect deps)
+  const needsAutoGreetRef = useRef(false);
+  // pendingGreetSession: non-null triggers the post-definition greeting effect
+  const [pendingGreetSession, setPendingGreetSession] = useState<string | null>(null);
   const newClassroomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stageEventsRef = useRef<StageEvent[]>([]);
@@ -454,15 +458,22 @@ export default function ClassroomPage() {
       if (!json.success) return;
 
       const rows = (json.data || []) as ClassroomHistoryItem[];
-      setMessages(rows.map((row) => ({
+      const loadedMessages = rows.map((row) => ({
         id: row.id,
         role: row.role,
         content: row.content,
         timestamp: new Date(row.created_at),
-        type: row.role === "student" ? "question" : "answer",
+        type: row.role === "student" ? "question" as const : "answer" as const,
         liveComponent: row.live_component ?? null,
         toolCalls: row.tool_calls ?? [],
-      })));
+      }));
+      setMessages(loadedMessages);
+
+      // Restore interactive blackboard if the last liveComponent exists in history
+      const lastWithComponent = [...loadedMessages].reverse().find(m => m.liveComponent);
+      if (lastWithComponent) {
+        setSelectedResourceId("interactive-stage");
+      }
 
       // Restore the persisted sessionId if we have one
       if (sid) {
@@ -473,8 +484,9 @@ export default function ClassroomPage() {
           setSessionId(latestSession);
           setActiveSessionId(selectedSubject, latestSession);
         } else if (rows.length === 0) {
-          // Auto-start a new session with greeting if completely empty
-          setTimeout(() => handleNewClassroom(), 500);
+          // Signal that we need an auto-greet; handled by a separate effect below
+          // to avoid circular dependency with handleSend / handleNewClassroom.
+          needsAutoGreetRef.current = true;
         }
       }
       stageEventsRef.current = [];
@@ -502,6 +514,8 @@ export default function ClassroomPage() {
 
   // On mount / subject change: restore sessionId from localStorage, then fetch matching history
   useEffect(() => {
+    needsAutoGreetRef.current = false;
+    sendGreetingRef.current = false; // allow re-greeting on subject switch
     setArchivedSessions(getArchivedSessions());
     void fetchClassroomHistory();
   }, [fetchClassroomHistory]);
@@ -598,16 +612,14 @@ export default function ClassroomPage() {
     setInputValue("");
     setIsStreaming(false);
 
-    // Fresh session
+    // Fresh session — trigger greeting via pendingGreetSession state
     const freshId = "local-" + Date.now().toString();
     setSessionId(freshId);
     setActiveSessionId(selectedSubject, freshId);
     void fetchClassroomResources();
-
-    // Trigger auto-greeting after a short delay
-    setTimeout(() => {
-      handleSend("[SYSTEM] 请根据我的学习记忆（如果有的话），简短地用老师的口吻跟我打个招呼，并询问我今天想学习什么。不要输出这段系统提示词。如果记忆为空，则直接简短问好。", true, freshId);
-    }, 100);
+    // Signal the post-definition greeting effect to fire
+    sendGreetingRef.current = false;
+    setPendingGreetSession(freshId);
   };
 
   // Resume an archived session
@@ -631,7 +643,31 @@ export default function ClassroomPage() {
     }
   }, [activeComponent]);
 
-  const handleSend = async (overrideMessage?: string, isGreeting: boolean = false, overrideSessionId?: string) => {
+  // pendingGreetSessionRef: set when a fresh empty classroom is detected.
+  // It is consumed by a useEffect that fires after handleSendRaw is defined.
+  const pendingGreetSessionRef = useRef<string | null>(null);
+
+  // Separate effect reads needsAutoGreetRef after render; this avoids a
+  // forward-reference to handleSendRaw while still breaking the cycle.
+  const sendGreetingRef = useRef(false);
+  useEffect(() => {
+    if (!needsAutoGreetRef.current) return;
+    if (sendGreetingRef.current) return;
+    sendGreetingRef.current = true;
+    needsAutoGreetRef.current = false;
+    const freshId = "local-" + Date.now().toString();
+    setSessionId(freshId);
+    setActiveSessionId(selectedSubject, freshId);
+    setPendingGreetSession(freshId);
+  // Only run when the subject changes (i.e. after fetchClassroomHistory resolves)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSubject]);
+
+  const handleSend = (overrideMessage?: string, isGreeting: boolean = false, overrideSessionId?: string) => {
+    void handleSendRaw(overrideMessage, isGreeting, overrideSessionId);
+  };
+
+  const handleSendRaw = async (overrideMessage?: string, isGreeting: boolean = false, overrideSessionId?: string) => {
     if (!inputValue.trim() && typeof overrideMessage !== "string") return;
     if (isStreaming) return;
 
@@ -821,6 +857,19 @@ export default function ClassroomPage() {
     "这个知识点和之前学过的有什么联系？",
     "帮我梳理一下这部分的知识框架",
   ];
+
+  // Consume pendingGreetSession once handleSendRaw is available.
+  // Using state (not ref) ensures React re-runs this effect when the value changes.
+  useEffect(() => {
+    if (!pendingGreetSession) return;
+    setPendingGreetSession(null);
+    void handleSendRaw(
+      "[SYSTEM] 请根据我的学习记忆（如果有的话），简短地用老师的口吓跟我打个招呼，并询问我今天想学习什么。不要输出这段系统提示词。如果记忆为空，则直接简短问好。",
+      true,
+      pendingGreetSession
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingGreetSession]);
 
   return (
     <div className="space-y-4 h-[calc(100vh-6rem)] flex flex-col">

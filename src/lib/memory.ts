@@ -131,8 +131,10 @@ class MemoryStore {
     return rows.map(toMemory);
   }
 
-  /** Full-text search using SQLite FTS5 */
-  search(query: string, limit = 20): Memory[] {
+  /** Full-text search using SQLite FTS5.
+   * @param subject - when provided, results are filtered to this subject tag first, then supplemented with global results.
+   */
+  search(query: string, limit = 20, subject?: string): Memory[] {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) return this.list({ limit });
     const db = getDb();
@@ -140,14 +142,52 @@ class MemoryStore {
 
     try {
       if (ftsQuery) {
-        const rows = db.prepare(`
-          SELECT m.* FROM memories m
-          JOIN memories_fts f ON f.rowid = m.id
-          WHERE memories_fts MATCH ?
-          ORDER BY m.pinned DESC, m.importance DESC, m.created_at DESC
-          LIMIT ?
-        `).all(ftsQuery, limit) as RawMemory[];
-        if (rows.length > 0) return rows.map(toMemory);
+        // Phase 1: subject-scoped search (if subject is provided)
+        if (subject) {
+          const subjectTag = `subject:${subject}`;
+          const subjectRows = db.prepare(`
+            SELECT m.* FROM memories m
+            JOIN memories_fts f ON f.rowid = m.id
+            WHERE memories_fts MATCH ?
+              AND json_type(m.tags, '$') = 'array'
+              AND EXISTS (
+                SELECT 1 FROM json_each(m.tags) WHERE value = ?
+              )
+            ORDER BY m.pinned DESC, m.importance DESC, m.created_at DESC
+            LIMIT ?
+          `).all(ftsQuery, subjectTag, limit) as RawMemory[];
+          if (subjectRows.length >= Math.min(limit, 3)) {
+            return subjectRows.map(toMemory);
+          }
+          // Phase 2: supplement with global results (exclude subject-specific wrong-subject records)
+          const supplementLimit = limit - subjectRows.length;
+          const seenIds = new Set(subjectRows.map(r => r.id));
+          const globalRows = db.prepare(`
+            SELECT m.* FROM memories m
+            JOIN memories_fts f ON f.rowid = m.id
+            WHERE memories_fts MATCH ?
+              AND m.id NOT IN (${subjectRows.map(() => "?").join(",") || "NULL"})
+              AND NOT (
+                json_type(m.tags, '$') = 'array'
+                AND EXISTS (
+                  SELECT 1 FROM json_each(m.tags) WHERE value LIKE 'subject:%' AND value != ?
+                )
+              )
+            ORDER BY m.pinned DESC, m.importance DESC, m.created_at DESC
+            LIMIT ?
+          `).all(ftsQuery, ...subjectRows.map(r => r.id), subjectTag, supplementLimit) as RawMemory[];
+          const combined = [...subjectRows, ...globalRows.filter(r => !seenIds.has(r.id))];
+          if (combined.length > 0) return combined.map(toMemory);
+        } else {
+          const rows = db.prepare(`
+            SELECT m.* FROM memories m
+            JOIN memories_fts f ON f.rowid = m.id
+            WHERE memories_fts MATCH ?
+            ORDER BY m.pinned DESC, m.importance DESC, m.created_at DESC
+            LIMIT ?
+          `).all(ftsQuery, limit) as RawMemory[];
+          if (rows.length > 0) return rows.map(toMemory);
+        }
       }
     } catch {
       // FTS query failed — fall through to LIKE search.
@@ -158,43 +198,59 @@ class MemoryStore {
       .map(() => "(content LIKE ? OR tags LIKE ? OR source LIKE ?)")
       .join(" AND ");
     const vals = terms.flatMap((term) => [`%${term}%`, `%${term}%`, `%${term}%`]);
+    const subjectFilter = subject ? ` AND tags LIKE ?` : "";
+    const subjectVals = subject ? [`%subject:${subject}%`] : [];
     const rows = db.prepare(`
       SELECT * FROM memories
-      WHERE ${where}
+      WHERE ${where}${subjectFilter}
       ORDER BY pinned DESC, importance DESC, created_at DESC
       LIMIT ?
-    `).all(...vals, limit) as RawMemory[];
+    `).all(...vals, ...subjectVals, limit) as RawMemory[];
 
     return rows.map(toMemory);
   }
 
   /** Build a compact memory context block for injection into LLM system prompts */
-  buildContext(query?: string, maxEntries = 10): string {
-    const memories = query ? this.search(query, maxEntries) : this.list({ limit: maxEntries });
+  buildContext(query?: string, maxEntries = 10, subject?: string): string {
+    const memories = query ? this.search(query, maxEntries, subject) : this.list({ limit: maxEntries });
     return formatMemoryContext(memories);
   }
 
-  /** Recall against multiple classroom signals and include pinned/recent fallbacks. */
-  buildContextFromQueries(queries: Array<string | undefined | null>, maxEntries = 10): string {
+  /** Recall against multiple classroom signals and include pinned/recent fallbacks.
+   * @param subject - when provided, results are scoped to this subject first.
+   */
+  buildContextFromQueries(queries: Array<string | undefined | null>, maxEntries = 10, subject?: string): string {
     const seen = new Map<number, Memory>();
     const normalizedQueries = queries
       .map((query) => query?.trim())
       .filter((query): query is string => !!query);
 
     for (const query of normalizedQueries) {
-      for (const memory of this.search(query, maxEntries)) {
+      for (const memory of this.search(query, maxEntries, subject)) {
         if (!seen.has(memory.id)) seen.set(memory.id, memory);
         if (seen.size >= maxEntries) return formatMemoryContext([...seen.values()]);
       }
     }
 
+    // Supplement with subject-pinned items
     for (const memory of this.list({ limit: maxEntries, pinned: true })) {
-      if (!seen.has(memory.id)) seen.set(memory.id, memory);
+      if (!seen.has(memory.id)) {
+        // Only add if not tagged for a different subject
+        const hasOtherSubjectTag = memory.tags.some(
+          t => t.startsWith("subject:") && (!subject || t !== `subject:${subject}`)
+        );
+        if (!hasOtherSubjectTag) seen.set(memory.id, memory);
+      }
       if (seen.size >= maxEntries) return formatMemoryContext([...seen.values()]);
     }
 
     for (const memory of this.list({ limit: maxEntries })) {
-      if (!seen.has(memory.id)) seen.set(memory.id, memory);
+      if (!seen.has(memory.id)) {
+        const hasOtherSubjectTag = subject
+          ? memory.tags.some(t => t.startsWith("subject:") && t !== `subject:${subject}`)
+          : false;
+        if (!hasOtherSubjectTag) seen.set(memory.id, memory);
+      }
       if (seen.size >= maxEntries) return formatMemoryContext([...seen.values()]);
     }
 

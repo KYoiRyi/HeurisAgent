@@ -67,14 +67,14 @@ D. [选项D]
 > 提示：请在下方答题区填写完整解题过程
 \`\`\`
 
-## 强制规则 C：收到 [EXERCISE_SUBMISSION] 时批改并强制录入错题
+## 强制规则 C：收到 [EXERCISE_SUBMISSION] 时批改并分支处理
 
 学生消息含 [EXERCISE_SUBMISSION] 时，执行下列全部步骤，不得省略：
-1. 给出完整批改反馈（正确/错误分析）
-2. 给出正确答案和详细解析
-3. **必须调用 save_error_question**（无论对错都记录，对了 error_type='correct'）
+1. 给出完整批改反馈（正确/错误分析）和正确答案详细解析
+2. **仅当学生答案有误或部分错误时**，才调用 save_error_question（error_type 使用 concept/calculation/careless/method，**禁止使用 correct**）
+3. 如答案正确，不调用 save_error_question，改为调用 add_memory 记录"已掌握"的知识点
 4. 如发现薄弱点，额外调用 add_memory
-5. 告知学生已录入错题本，并出一道同类新题（调用 save_learning_resource exercise）
+5. 告知学生批改结果，并出一道同类新题（调用 save_learning_resource exercise）
 
 ## 强制规则 D：工具边界（严格区分）
 | 内容类型 | 使用工具 |
@@ -198,6 +198,7 @@ export async function POST(request: NextRequest) {
     const classroomHistoryContext = classroomHistoryStore.buildContext(recordSubject, 18);
 
     // Auto-inject memory context from the active turn plus previously saved talks.
+    // Pass `recordSubject` so recall is scoped to the current subject first.
     const memoryContext = memoryStore.buildContextFromQueries(
       [
         message,
@@ -207,7 +208,8 @@ export async function POST(request: NextRequest) {
         "错题 误区 薄弱点 error-question weakness knowledge-point",
         ...stageEvents.map(formatStageEventForSearch),
       ],
-      14
+      14,
+      recordSubject
     );
 
     // Load agent skills

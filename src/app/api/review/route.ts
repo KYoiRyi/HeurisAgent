@@ -127,13 +127,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (!client) {
-      const errorMemories = memoryStore.search(`${planSubject} 错题 误区 薄弱点 error-question weakness`, 12);
+      const errorMemories = memoryStore.search(`${planSubject} 错题 误区 薄弱点 error-question weakness`, 12, planSubject);
       if (errorMemories.length > 0) {
         errorSummary = `本地错题/薄弱点记忆(${errorMemories.length}条)：${errorMemories
           .map((memory) => memory.content.replace(/\s+/g, " ").slice(0, 180))
           .join("；")}`;
       }
-      const knowledgeMemories = memoryStore.search(`${planSubject} 知识点 knowledge-point`, 12);
+      const knowledgeMemories = memoryStore.search(`${planSubject} 知识点 knowledge-point`, 12, planSubject);
       if (knowledgeMemories.length > 0) {
         classSummary = `本地知识点记录(${knowledgeMemories.length}条)：${knowledgeMemories
           .map((memory) => memory.content.replace(/\s+/g, " ").slice(0, 160))
