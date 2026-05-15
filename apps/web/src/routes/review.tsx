@@ -5,6 +5,7 @@ import { Calendar, CheckCircle2, Target, Clock, ChevronRight, Sparkles, X, Loade
 import { api } from "@/lib/api";
 import type { ReviewListResponse, ReviewPlan } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
+import { Markdown } from "@/components/ui/markdown";
 
 const SUBJECTS = ["全部", "数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理", "通用"];
 
@@ -313,9 +314,9 @@ function PlanDetail({
           {plan.plan_title}
         </h2>
         {plan.review_strategy && (
-          <p className="text-[13.5px] leading-[1.7] text-[var(--color-body)] dark:text-[var(--color-on-dark-soft)] whitespace-pre-wrap">
-            {plan.review_strategy}
-          </p>
+          <div className="prose prose-sm dark:prose-invert max-w-none text-[13.5px] leading-[1.7]">
+            <Markdown>{plan.review_strategy}</Markdown>
+          </div>
         )}
       </div>
 
@@ -399,9 +400,9 @@ function PlanDetail({
 
       {plan.plan_content && (
         <Section title="完整方案">
-          <pre className="whitespace-pre-wrap rounded-md border border-[var(--color-hairline)] bg-[var(--color-surface-soft)] p-4 text-[13px] leading-[1.7] text-[var(--color-body-strong)] dark:border-[rgba(250,249,245,0.08)] dark:bg-[var(--color-surface-dark-soft)] dark:text-[var(--color-on-dark-soft)]">
-            {plan.plan_content}
-          </pre>
+          <div className="prose prose-sm dark:prose-invert max-w-none rounded-md border border-[var(--color-hairline)] bg-[var(--color-surface-soft)] p-4 dark:border-[rgba(250,249,245,0.08)] dark:bg-[var(--color-surface-dark-soft)]">
+            <Markdown>{plan.plan_content}</Markdown>
+          </div>
         </Section>
       )}
     </div>

@@ -5,6 +5,7 @@ import { AlertCircle, CheckCircle2, Trash2, BookOpen, Filter, Sparkles, Loader2,
 import { api } from "@/lib/api";
 import type { ErrorListResponse, ErrorQuestion, ErrorStats } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
+import { Markdown } from "@/components/ui/markdown";
 
 const ERROR_TYPES: Record<string, string> = {
   concept: "概念",
@@ -166,6 +167,7 @@ export default function ErrorsRoute() {
                 item={selected}
                 onGenerateVariants={(count) => generateVariants.mutate({ id: selected.id, count })}
                 generating={generateVariants.isPending && generateVariants.variables?.id === selected.id}
+                onMarkMastered={() => toggleMastered.mutate(selected)}
               />
             ) : (
               <div className="rounded-2xl border border-dashed border-[var(--color-hairline)] p-12 text-center text-[14px] text-[var(--color-muted)] dark:border-[rgba(250,249,245,0.08)]">
@@ -275,9 +277,9 @@ function ErrorRow({
           </button>
         </div>
       </div>
-      <p className="mt-2 line-clamp-3 text-[13.5px] leading-[1.6] text-[var(--color-body-strong)] dark:text-[var(--color-on-dark-soft)]">
-        {item.question_text}
-      </p>
+      <div className="mt-2 line-clamp-3 prose prose-sm dark:prose-invert max-w-none text-[13.5px] leading-[1.6] [&_p]:my-0">
+        <Markdown>{item.question_text}</Markdown>
+      </div>
       <div className="mt-2 flex items-center gap-2 text-[10.5px] text-[var(--color-muted)]">
         <span>{new Date(item.created_at).toLocaleString("zh-CN", { hour12: false })}</span>
         {item.mastered && <span className="text-[#3a7a52]">· 已掌握</span>}
@@ -291,10 +293,12 @@ function ErrorDetail({
   item,
   onGenerateVariants,
   generating,
+  onMarkMastered,
 }: {
   item: ErrorQuestion;
   onGenerateVariants: (count: number) => void;
   generating: boolean;
+  onMarkMastered: () => void;
 }) {
   const typeLabel = ERROR_TYPES[item.error_type ?? "unknown"] ?? item.error_type ?? "未分类";
   const variants = (item.similar_questions ?? []) as Array<{
@@ -318,40 +322,40 @@ function ErrorDetail({
             </span>
           )}
         </div>
-        <h2 className="font-display text-[22px] leading-tight tracking-tight text-ink dark:text-on-dark whitespace-pre-wrap">
-          {item.question_text}
-        </h2>
+        <div className="font-display text-[22px] leading-tight tracking-tight text-ink dark:text-on-dark">
+          <Markdown>{item.question_text}</Markdown>
+        </div>
       </div>
 
       {item.student_answer && (
         <Section icon={AlertCircle} title="学生答案">
-          <pre className="whitespace-pre-wrap text-[13.5px] leading-[1.7] text-[var(--color-body-strong)] dark:text-[var(--color-on-dark-soft)]">
-            {item.student_answer}
-          </pre>
+          <div className="prose prose-sm dark:prose-invert max-w-none text-[13.5px] leading-[1.7]">
+            <Markdown>{item.student_answer}</Markdown>
+          </div>
         </Section>
       )}
 
       {item.correct_answer && (
         <Section icon={CheckCircle2} title="参考答案">
-          <pre className="whitespace-pre-wrap text-[13.5px] leading-[1.7] text-[var(--color-body-strong)] dark:text-[var(--color-on-dark-soft)]">
-            {item.correct_answer}
-          </pre>
+          <div className="prose prose-sm dark:prose-invert max-w-none text-[13.5px] leading-[1.7]">
+            <Markdown>{item.correct_answer}</Markdown>
+          </div>
         </Section>
       )}
 
       {item.error_analysis && (
         <Section icon={AlertCircle} title="错因分析">
-          <pre className="whitespace-pre-wrap text-[13.5px] leading-[1.7] text-[var(--color-body-strong)] dark:text-[var(--color-on-dark-soft)]">
-            {item.error_analysis}
-          </pre>
+          <div className="prose prose-sm dark:prose-invert max-w-none text-[13.5px] leading-[1.7]">
+            <Markdown>{item.error_analysis}</Markdown>
+          </div>
         </Section>
       )}
 
       {item.reinforcement_suggestions && (
         <Section icon={BookOpen} title="强化建议">
-          <pre className="whitespace-pre-wrap text-[13.5px] leading-[1.7] text-[var(--color-body-strong)] dark:text-[var(--color-on-dark-soft)]">
-            {item.reinforcement_suggestions}
-          </pre>
+          <div className="prose prose-sm dark:prose-invert max-w-none text-[13.5px] leading-[1.7]">
+            <Markdown>{item.reinforcement_suggestions}</Markdown>
+          </div>
         </Section>
       )}
 
@@ -413,8 +417,8 @@ function ErrorDetail({
                   )}
                 </div>
                 {v.question_text && (
-                  <div className="mt-2 text-[13.5px] leading-[1.65] text-[var(--color-body-strong)] dark:text-on-dark whitespace-pre-wrap">
-                    {v.question_text}
+                  <div className="mt-2 prose prose-sm dark:prose-invert max-w-none text-[13.5px] leading-[1.65]">
+                    <Markdown>{v.question_text}</Markdown>
                   </div>
                 )}
                 {v.hint && (
@@ -422,16 +426,26 @@ function ErrorDetail({
                     提示：{v.hint}
                   </div>
                 )}
-                {v.answer && (
-                  <details className="mt-2 group">
-                    <summary className="cursor-pointer text-[12px] text-[var(--color-coral-active)] hover:underline">
-                      查看参考答案
-                    </summary>
-                    <pre className="mt-1 whitespace-pre-wrap rounded bg-[var(--color-canvas)] p-2 text-[12.5px] leading-[1.6] text-[var(--color-body-strong)] dark:bg-[var(--color-surface-dark-elev)] dark:text-[var(--color-on-dark-soft)]">
-                      {v.answer}
-                    </pre>
-                  </details>
-                )}
+                <div className="mt-3 flex items-center gap-2">
+                  {v.answer && (
+                    <details className="group flex-1">
+                      <summary className="cursor-pointer text-[12px] text-[var(--color-coral-active)] hover:underline">
+                        查看参考答案
+                      </summary>
+                      <div className="mt-2 prose prose-sm dark:prose-invert max-w-none rounded bg-[var(--color-canvas)] p-3 text-[12.5px] leading-[1.6] dark:bg-[var(--color-surface-dark-elev)]">
+                        <Markdown>{v.answer}</Markdown>
+                      </div>
+                    </details>
+                  )}
+                  <button
+                    type="button"
+                    onClick={onMarkMastered}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[#3a7a52]/30 bg-[#3a7a52]/10 px-3 py-1.5 text-[11.5px] font-medium text-[#3a7a52] transition hover:bg-[#3a7a52]/20"
+                  >
+                    <CheckCircle2 className="h-3 w-3" strokeWidth={2} />
+                    我答对了
+                  </button>
+                </div>
               </li>
             ))}
           </ol>

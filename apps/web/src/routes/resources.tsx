@@ -5,6 +5,7 @@ import { FolderOpen, Plus, BookOpen, FileText, Sparkles, Trash2, X } from "lucid
 import { api } from "@/lib/api";
 import type { ResourceItem, ResourceListResponse } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
+import { Markdown } from "@/components/ui/markdown";
 
 const CATEGORIES: Array<{ id: string; label: string; icon: typeof BookOpen }> = [
   { id: "all", label: "全部", icon: FolderOpen },
@@ -19,6 +20,7 @@ export default function ResourcesRoute() {
   const [category, setCategory] = useState("all");
   const [subject, setSubject] = useState("");
   const [composing, setComposing] = useState(false);
+  const [viewingResource, setViewingResource] = useState<ResourceItem | null>(null);
 
   const listQ = useQuery({
     queryKey: ["resources", { category, subject }],
@@ -115,10 +117,14 @@ export default function ResourcesRoute() {
             </div>
           )}
           {items.map((r) => (
-            <ResourceCard key={r.id} item={r} onDelete={() => deleteR.mutate(r.id)} />
+            <ResourceCard key={r.id} item={r} onDelete={() => deleteR.mutate(r.id)} onClick={() => setViewingResource(r)} />
           ))}
         </div>
       </section>
+
+      {viewingResource && (
+        <ResourceDetailModal item={viewingResource} onClose={() => setViewingResource(null)} />
+      )}
 
       {composing && (
         <ComposeModal
@@ -133,16 +139,19 @@ export default function ResourcesRoute() {
   );
 }
 
-function ResourceCard({ item, onDelete }: { item: ResourceItem; onDelete: () => void }) {
+function ResourceCard({ item, onDelete, onClick }: { item: ResourceItem; onDelete: () => void; onClick: () => void }) {
   return (
-    <div className="group relative flex h-full flex-col rounded-lg border border-[var(--color-hairline)] bg-[var(--color-canvas)] p-5 transition hover:-translate-y-0.5 hover:shadow-[0_4px_20px_rgba(20,20,19,0.06)] dark:border-[rgba(250,249,245,0.08)] dark:bg-[var(--color-surface-dark-elev)]">
-      <div className="flex items-start justify-between gap-2">
+    <div
+      role="button"
+      onClick={onClick}
+      className="group relative flex h-full cursor-pointer flex-col rounded-lg border border-[var(--color-hairline)] bg-[var(--color-canvas)] p-5 transition hover:-translate-y-0.5 hover:shadow-[0_4px_20px_rgba(20,20,19,0.06)] dark:border-[rgba(250,249,245,0.08)] dark:bg-[var(--color-surface-dark-elev)]"
+    >      <div className="flex items-start justify-between gap-2">
         <span className="caption-uppercase text-[10px]">
           {item.category} · {item.subject}
         </span>
         <button
           type="button"
-          onClick={onDelete}
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className="opacity-0 transition group-hover:opacity-100 grid h-6 w-6 place-items-center rounded-md text-[var(--color-muted)] hover:bg-[var(--color-surface-soft)] hover:text-[var(--color-coral-active)]"
         >
           <Trash2 className="h-3 w-3" strokeWidth={2} />
@@ -272,6 +281,45 @@ function ComposeModal({
             保存
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ResourceDetailModal({ item, onClose }: { item: ResourceItem; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--color-hairline)] bg-[var(--color-canvas)] shadow-2xl dark:border-[rgba(250,249,245,0.08)] dark:bg-[var(--color-surface-dark-elev)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-[var(--color-hairline)] px-6 py-4 dark:border-[rgba(250,249,245,0.08)]">
+          <div>
+            <div className="caption-uppercase text-[10px]">{item.category} · {item.subject}</div>
+            <h2 className="mt-1 font-display text-[22px] tracking-tight text-ink dark:text-on-dark">{item.title}</h2>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full hover:bg-[var(--color-surface-soft)]">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {item.content ? (
+            <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-[var(--color-surface-soft)] dark:[&_pre]:bg-[var(--color-surface-dark-soft)]">
+              <Markdown>{item.content}</Markdown>
+            </div>
+          ) : (
+            <p className="text-[13px] text-[var(--color-muted)]">该资料暂无正文内容。</p>
+          )}
+        </div>
+        {item.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 border-t border-[var(--color-hairline)] px-6 py-3 dark:border-[rgba(250,249,245,0.08)]">
+            {item.tags.map((t) => (
+              <span key={t} className="rounded-full border border-[var(--color-hairline)] bg-[var(--color-surface-soft)] px-2 py-0.5 font-mono text-[10px] text-[var(--color-body)] dark:border-[rgba(250,249,245,0.08)] dark:bg-[var(--color-surface-dark-soft)]">
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
