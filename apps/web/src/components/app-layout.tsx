@@ -58,7 +58,7 @@ export default function AppLayout() {
           collapsed ? "ml-[76px]" : "ml-[268px]",
         )}
       >
-        <TopBar activeLabel={active?.label ?? "HeurisAgent"} agent={activeAgent} />
+        <TopBar activeLabel={active?.label ?? "启发式学习智能体"} agent={activeAgent} />
         <main className="flex-1 px-6 pb-16 pt-8 md:px-12 lg:px-16">
           <div className="mx-auto w-full max-w-[1200px]">
             <Outlet />
@@ -85,7 +85,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
             collapsed ? "pointer-events-none w-0 -translate-x-2 opacity-0" : "translate-x-0 opacity-100",
           )}
         >
-          <div className="whitespace-nowrap font-display text-[20px] tracking-tight">HeurisAgent</div>
+          <div className="whitespace-nowrap font-display text-[20px] tracking-tight">启发式学习智能体</div>
           <div className="whitespace-nowrap caption-uppercase text-[10px]">启发式学业智能体</div>
         </div>
       </div>

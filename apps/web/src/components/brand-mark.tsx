@@ -1,5 +1,5 @@
 /**
- * Anthropic-style 8-spike radial mark — used as the wordmark prefix and
+ * 8-spike radial mark — used as the wordmark prefix and
  * inline as a content marker across the editorial layout.
  */
 import { cn } from "@/lib/utils";

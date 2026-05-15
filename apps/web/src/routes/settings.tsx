@@ -8,13 +8,7 @@ import { cn } from "@/lib/utils";
 
 const PROVIDERS = [
   { id: "minimax", label: "MiniMax", placeholder: "https://api.minimaxi.com/v1" },
-  { id: "openai", label: "OpenAI", placeholder: "https://api.openai.com/v1" },
-  { id: "anthropic", label: "Anthropic", placeholder: "https://api.anthropic.com" },
-  { id: "google", label: "Google Gemini", placeholder: "https://generativelanguage.googleapis.com/v1beta" },
-  { id: "mistral", label: "Mistral", placeholder: "https://api.mistral.ai" },
-  { id: "deepseek", label: "DeepSeek", placeholder: "https://api.deepseek.com/v1" },
-  { id: "groq", label: "Groq", placeholder: "https://api.groq.com/openai/v1" },
-  { id: "openrouter", label: "OpenRouter", placeholder: "https://openrouter.ai/api/v1" },
+  { id: "openai", label: "OpenAI 兼容", placeholder: "https://api.openai.com/v1" },
   { id: "ollama", label: "本地 Ollama", placeholder: "http://127.0.0.1:11434/v1" },
 ];
 
@@ -77,7 +71,7 @@ export default function SettingsRoute() {
   return (
     <div className="space-y-10">
       <header className="space-y-3">
-        <div className="caption-uppercase">AI runtime</div>
+        <div className="caption-uppercase">模型配置</div>
         <h1 className="font-display-tight text-[44px] leading-[1.05] tracking-tight text-ink dark:text-on-dark md:text-[52px]">
           AI 设置
         </h1>
@@ -89,7 +83,7 @@ export default function SettingsRoute() {
       <section className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-6 rounded-2xl border border-[var(--color-hairline)] bg-[var(--color-canvas)] p-7 dark:border-[rgba(250,249,245,0.08)] dark:bg-[var(--color-surface-dark-elev)]">
           <div className="space-y-1.5">
-            <div className="caption-uppercase">Provider</div>
+            <div className="caption-uppercase">模型提供商</div>
             <div className="grid grid-cols-3 gap-2">
               {PROVIDERS.map((p) => (
                 <button
@@ -109,7 +103,7 @@ export default function SettingsRoute() {
             </div>
           </div>
 
-          <Field label="Model" hint="例如：MiniMax-M2.5-highspeed / gpt-4o-mini">
+          <Field label="模型名称" hint="例如：MiniMax-M2.5-highspeed / qwen2.5">
             <input
               value={form.model}
               onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
@@ -118,7 +112,7 @@ export default function SettingsRoute() {
             />
           </Field>
 
-          <Field label="Base URL" hint={`默认：${provider.placeholder}`}>
+          <Field label="接口地址" hint={`默认：${provider.placeholder}`}>
             <input
               value={form.baseUrl}
               onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
@@ -128,7 +122,7 @@ export default function SettingsRoute() {
           </Field>
 
           <Field
-            label="API Key"
+            label="密钥"
             hint={
               settingsQ.data?.hasApiKey
                 ? `已配置：${settingsQ.data.apiKeyMasked}（留空保存即保留现有密钥）`
@@ -210,18 +204,18 @@ function HealthCard({ health, loading }: { health?: LlmHealth; loading: boolean 
   return (
     <div className="rounded-2xl border border-[var(--color-hairline)] bg-[var(--color-canvas)] p-7 dark:border-[rgba(250,249,245,0.08)] dark:bg-[var(--color-surface-dark-elev)]">
       <div className="flex items-center justify-between">
-        <div className="caption-uppercase">Endpoint health</div>
+        <div className="caption-uppercase">连接状态</div>
         <Activity className="h-3.5 w-3.5 text-[var(--color-muted)]" strokeWidth={2} />
       </div>
       <div className="mt-4 space-y-3 text-[13.5px]">
-        <Row k="Status" v={loading ? "检测中…" : health?.ok ? "在线" : "离线"} good={health?.ok} />
-        <Row k="Provider" v={health?.provider ?? "—"} />
-        <Row k="Model" v={health?.model ?? "—"} />
-        <Row k="Base URL" v={health?.baseUrl ?? "—"} mono />
-        {health?.error && <Row k="Error" v={health.error} bad />}
+        <Row k="状态" v={loading ? "检测中…" : health?.ok ? "在线" : "离线"} good={health?.ok} />
+        <Row k="提供商" v={health?.provider ?? "—"} />
+        <Row k="模型" v={health?.model ?? "—"} />
+        <Row k="接口地址" v={health?.baseUrl ?? "—"} mono />
+        {health?.error && <Row k="错误" v={health.error} bad />}
         {health?.models?.length ? (
           <div className="pt-2">
-            <div className="caption-uppercase mb-1.5">Available models</div>
+            <div className="caption-uppercase mb-1.5">可用模型</div>
             <div className="max-h-44 overflow-y-auto rounded-md border border-[var(--color-hairline)] bg-[var(--color-surface-soft)] p-2 font-mono text-[11.5px] dark:border-[rgba(250,249,245,0.08)] dark:bg-[var(--color-surface-dark-soft)]">
               {health.models.map((m) => (
                 <div key={m} className="truncate text-[var(--color-body-strong)] dark:text-[var(--color-on-dark-soft)]">
