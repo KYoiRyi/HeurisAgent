@@ -11,6 +11,7 @@ import { ResourcesService } from "@/modules/resources/resources.service";
 import { ErrorsService } from "@/modules/errors/errors.service";
 import { SettingsService } from "@/modules/settings/settings.service";
 import { ClassroomHistoryService } from "@/modules/classroom-history/classroom-history.service";
+import { ClassroomSessionsService } from "@/modules/classroom-history/classroom-sessions.service";
 import { AgentEventBus } from "@/runtime/event-bus";
 import { buildClassroomTools } from "@/runtime/classroom-tools";
 import { LearningRecordsService } from "@/modules/learning-records/learning-records.service";
@@ -47,13 +48,16 @@ export class ClassroomService {
     private readonly errors: ErrorsService,
     private readonly settings: SettingsService,
     private readonly history: ClassroomHistoryService,
+    private readonly sessions: ClassroomSessionsService,
     private readonly learningRecords: LearningRecordsService,
   ) {}
 
   async runTurn(input: ClassroomTurnInput): Promise<ClassroomTurnResult> {
     const subject = input.subject?.trim() || "通用";
     const studentName = input.studentName?.trim();
-    const sessionId = input.sessionId?.trim();
+    const sessionId = input.sessionId?.trim()
+      ? await this.sessions.ensureSession(input.sessionId.trim(), subject)
+      : undefined;
 
     const [run] = await this.db
       .insert(taskRuns)
@@ -77,6 +81,10 @@ export class ClassroomService {
       role: "student",
       content: input.prompt,
     });
+
+    if (sessionId) {
+      this.sessions.updateTitle(sessionId, input.prompt.slice(0, 60) || `${subject} 课堂`).catch(() => {});
+    }
 
     try {
       const memCtx = await this.memory.buildContextFromQueries(

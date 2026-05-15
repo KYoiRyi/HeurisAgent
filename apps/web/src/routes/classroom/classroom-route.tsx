@@ -20,8 +20,6 @@ import type {
 } from "./types";
 import { SUBJECTS, INTERACTIVE_TAB } from "./types";
 import {
-  getArchivedSessions,
-  saveArchivedSessions,
   getActiveSessionId,
   setActiveSessionId,
   sanitizeVisibleContent,
@@ -53,7 +51,6 @@ export default function ClassroomRoute() {
   const [showLogs, setShowLogs] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
-  const [archivedSessions, setArchivedSessions] = useState<ArchivedSession[]>([]);
   const [newClassroomArmed, setNewClassroomArmed] = useState(false);
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
   const [autoSubmitEnabled, setAutoSubmitEnabled] = useState(false);
@@ -62,6 +59,21 @@ export default function ClassroomRoute() {
   const tabsScrollRef = useRef<HTMLDivElement>(null);
 
   const stageHistory = useStageHistory(messages);
+
+  const sessionsQ = useQuery({
+    queryKey: ["classroom-sessions", { subject }],
+    queryFn: () => api.get<{ items: ArchivedSession[] }>(`/classroom/sessions?subject=${encodeURIComponent(subject)}&limit=20`),
+    refetchOnWindowFocus: false,
+  });
+  const archivedSessions: ArchivedSession[] = useMemo(() => {
+    return (sessionsQ.data?.items ?? []).map((s: any) => ({
+      sessionId: s.id,
+      subject: s.subject,
+      title: s.title,
+      archivedAt: s.createdAt ?? s.endedAt ?? new Date().toISOString(),
+      messageCount: s.messageCount ?? 0,
+    }));
+  }, [sessionsQ.data]);
 
   const setSessionId = useCallback(
     (id: string | null) => {
@@ -114,7 +126,6 @@ export default function ClassroomRoute() {
 
   useEffect(() => {
     setSessionIdState(getActiveSessionId(subject));
-    setArchivedSessions(getArchivedSessions());
   }, [subject]);
 
   useEffect(() => {
@@ -178,7 +189,7 @@ export default function ClassroomRoute() {
 
   const ensureSession = useCallback((): string => {
     if (sessionId) return sessionId;
-    const fresh = `local-${Date.now()}`;
+    const fresh = crypto.randomUUID();
     setSessionId(fresh);
     return fresh;
   }, [sessionId, setSessionId]);
@@ -243,6 +254,7 @@ export default function ClassroomRoute() {
       setRunning(false);
       qc.invalidateQueries({ queryKey: ["classroom-history"] });
       qc.invalidateQueries({ queryKey: ["classroom-resources"] });
+      qc.invalidateQueries({ queryKey: ["classroom-sessions"] });
       qc.invalidateQueries({ queryKey: ["agent-status"] });
       qc.invalidateQueries({ queryKey: ["errors"] });
       qc.invalidateQueries({ queryKey: ["resources"] });
@@ -295,20 +307,7 @@ export default function ClassroomRoute() {
     setNewClassroomArmed(false);
 
     if (sessionId && messages.length > 0) {
-      const firstUser = messages.find((m) => m.role === "student");
-      const title =
-        firstUser?.content.slice(0, 40) ||
-        `${subject} 课堂 ${new Date().toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
-      const archive: ArchivedSession = {
-        sessionId,
-        subject,
-        title,
-        archivedAt: new Date().toISOString(),
-        messageCount: messages.length,
-      };
-      const updated = [archive, ...getArchivedSessions().filter((s) => s.sessionId !== sessionId)];
-      saveArchivedSessions(updated);
-      setArchivedSessions(updated);
+      api.patch(`/classroom/sessions/${sessionId}/archive`, {}).catch(() => {});
     }
 
     setMessages([]);
@@ -319,6 +318,7 @@ export default function ClassroomRoute() {
     setSessionId(null);
     setSelectedTab(null);
     setLatestScoreFeedback(null);
+    qc.invalidateQueries({ queryKey: ["classroom-sessions"] });
   };
 
   const handleResumeSession = (archived: ArchivedSession) => {
@@ -326,6 +326,7 @@ export default function ClassroomRoute() {
     setSubject(archived.subject);
     setSessionIdState(archived.sessionId);
     setActiveSessionId(archived.subject, archived.sessionId);
+    qc.invalidateQueries({ queryKey: ["classroom-history"] });
   };
 
   return (
@@ -397,7 +398,7 @@ export default function ClassroomRoute() {
         <ArchivedSessionList
           sessions={archivedSessions}
           onResume={handleResumeSession}
-          onClear={() => { saveArchivedSessions([]); setArchivedSessions([]); }}
+          onClear={() => {}}
         />
       )}
 
