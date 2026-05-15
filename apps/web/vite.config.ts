@@ -18,6 +18,7 @@ export default defineConfig({
         target: "http://127.0.0.1:5001",
         changeOrigin: true,
         ws: true,
+        timeout: 120000,
       },
       "/health": "http://127.0.0.1:5001",
     },
