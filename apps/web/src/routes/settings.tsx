@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 const PROVIDERS = [
   { id: "minimax", label: "MiniMax", placeholder: "https://api.minimaxi.com/v1" },
+  { id: "deepseek", label: "DeepSeek", placeholder: "https://api.deepseek.com/v1" },
   { id: "openai", label: "OpenAI 兼容", placeholder: "https://api.openai.com/v1" },
   { id: "ollama", label: "本地 Ollama", placeholder: "http://127.0.0.1:11434/v1" },
 ];

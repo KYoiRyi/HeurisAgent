@@ -150,6 +150,7 @@ function resolveBaseUrl(api: Api, provider?: string, customBaseUrl?: string): st
 
   const p = (provider ?? "").toLowerCase();
   if (p === "ollama") return "http://127.0.0.1:11434/v1";
+  if (p === "deepseek") return "https://api.deepseek.com/v1";
   if (p === "openai") return "https://api.openai.com/v1";
   if (p === "minimax") return DEFAULT_BASE_URL;
   return DEFAULT_BASE_URL;
