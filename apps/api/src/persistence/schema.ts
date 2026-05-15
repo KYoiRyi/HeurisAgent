@@ -234,7 +234,7 @@ export const reviewPlans = pgTable(
     planContent: text("plan_content").notNull().default(""),
     blindSpots: jsonb("blind_spots").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     schedule: jsonb("schedule").$type<unknown[]>().notNull().default(sql`'[]'::jsonb`),
-    priorityTopics: jsonb("priority_topics").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    priorityTopics: jsonb("priority_topics").$type<unknown[]>().notNull().default(sql`'[]'::jsonb`),
     reviewStrategy: text("review_strategy"),
     progress: integer("progress").notNull().default(0),
     totalTasks: integer("total_tasks").notNull().default(0),

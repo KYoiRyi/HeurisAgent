@@ -47,7 +47,7 @@ export class ReviewService {
         planContent: String(input.planData.plan_content || ""),
         blindSpots: normalizeStringArray(input.planData.blind_spots),
         schedule: normalizeArray(input.planData.schedule),
-        priorityTopics: normalizeStringArray(input.planData.priority_topics),
+        priorityTopics: normalizeArray(input.planData.priority_topics),
         reviewStrategy: String(input.planData.review_strategy || ""),
         totalTasks: input.totalTasks,
         status: "active",

@@ -6,17 +6,21 @@ import { api } from "@/lib/api";
 import type { ReviewListResponse, ReviewPlan } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 
+const SUBJECTS = ["全部", "数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理", "通用"];
+
 export default function ReviewRoute() {
   const qc = useQueryClient();
+  const [subject, setSubject] = useState("全部");
   const [statusFilter, setStatusFilter] = useState<"active" | "completed" | "all">("active");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
 
   const listQ = useQuery({
-    queryKey: ["review", { statusFilter }],
+    queryKey: ["review", { statusFilter, subject }],
     queryFn: () => {
       const p = new URLSearchParams({ limit: "30" });
       if (statusFilter !== "all") p.set("status", statusFilter);
+      if (subject !== "全部") p.set("subject", subject);
       return api.get<ReviewListResponse>(`/review?${p.toString()}`);
     },
   });
@@ -54,7 +58,16 @@ export default function ReviewRoute() {
         </button>
       </header>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          className="settings-input h-9 max-w-[110px]"
+        >
+          {SUBJECTS.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
         {(["active", "completed", "all"] as const).map((s) => (
           <button
             key={s}
@@ -108,6 +121,7 @@ export default function ReviewRoute() {
 
       {generating && (
         <GenerateModal
+          defaultSubject={subject !== "全部" ? subject : "数学"}
           onClose={() => setGenerating(false)}
           onGenerated={(plan) => {
             setGenerating(false);
@@ -122,15 +136,17 @@ export default function ReviewRoute() {
 }
 
 function GenerateModal({
+  defaultSubject,
   onClose,
   onGenerated,
 }: {
+  defaultSubject: string;
   onClose: () => void;
   onGenerated: (plan: ReviewPlan) => void;
 }) {
   const [form, setForm] = useState({
     studentName: "",
-    subject: "数学",
+    subject: defaultSubject,
     durationDays: 7,
     notes: "",
   });
@@ -176,12 +192,15 @@ function GenerateModal({
             placeholder="学生姓名（可选）"
             className="settings-input"
           />
-          <input
+          <select
             value={form.subject}
             onChange={(e) => setForm({ ...form, subject: e.target.value })}
-            placeholder="学科 (例如：数学)"
             className="settings-input"
-          />
+          >
+            {SUBJECTS.filter((s) => s !== "全部").map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
           <div className="col-span-2 flex items-center gap-3">
             <span className="text-[12.5px] text-[var(--color-muted)]">周期</span>
             {[3, 5, 7, 10, 14].map((d) => (
