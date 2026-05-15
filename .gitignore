@@ -10,3 +10,4 @@ data/*
 .env.local
 .DS_Store
 *.log
+*.zip

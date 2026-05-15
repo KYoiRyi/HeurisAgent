@@ -16,8 +16,7 @@ const SETTINGS_KEY = "active_llm";
 
 const DEFAULT_PROVIDER = "minimax";
 const DEFAULT_BASE_URL = "https://api.minimaxi.com/v1";
-const DEFAULT_API_KEY =
-  "sk-cp-pAA1BuMfXYyblLgGP9prg2zO2xUY69HPHhdekBbvwff9-qgRYfDVo-6QouXYTihJm1_ZYtSnipxJau12DQkpGtsdnpO0HDu0udvhBxMlb3N_G0ne6YUYHoo";
+const DEFAULT_API_KEY = process.env.MINIMAX_API_KEY ?? "";
 const DEFAULT_MODEL = "MiniMax-M2.5-highspeed";
 
 const DEFAULT_SETTINGS: HeurisLLMSettings = {
