@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd d:/ollama/lib/HeurisAgent && rm -rf src/app/api src/storage scripts start.cmd start-prod.cmd src/server.ts src/lib/agent-runtime.ts next.config.ts next-env.d.ts postcss.config.mjs eslint.config.mjs components.json public/next.svg public/vercel.svg \"启发式学业智能体_创作说明文档.docx\" tsconfig.tsbuildinfo DESIGN-ollama.md && ls)",
+      "Bash(cd d:/ollama/lib/HeurisAgent && mkdir -p apps/api/src/llm apps/web/src apps/web/public && mv src/lib/pi-ai apps/api/src/llm/ && mv src/lib/pi-agent apps/api/src/llm/ && mv src/components apps/web/src/components && mv src/hooks apps/web/src/hooks && mv public/*.svg apps/web/public/ && mv src/app/globals.css apps/web/src/globals.css && mv src/app/favicon.ico apps/web/public/ && rm -rf public src/app && ls apps/api/src/llm apps/web/src)",
+      "Bash(mv components/app-layout.tsx components/classroom-page.tsx components/dashboard-page.tsx components/errors-page.tsx components/memory-page.tsx components/resources-page.tsx components/review-page.tsx components/settings-page.tsx /tmp/legacy-components-backup/)",
+      "Bash(mkdir -p ../_legacy)",
+      "Bash(mv components/app-layout.tsx ../_legacy/)",
+      "Bash(mv components/classroom-page.tsx ../_legacy/)",
+      "Bash(mv components/dashboard-page.tsx ../_legacy/)",
+      "Bash(mv apps/web/_legacy/* _legacy/web/)",
+      "Bash(mv apps/api/src/legacy/* _legacy/api/)",
+      "Bash(pnpm ts-check *)",
+      "Bash(pnpm --filter @heuris/api ts-check)",
+      "Bash(pnpm --filter @heuris/api build)",
+      "Bash(pnpm --filter @heuris/web ts-check)",
+      "Bash(pnpm --filter @heuris/web build)",
+      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 5001 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }')",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 5001 -ErrorAction SilentlyContinue\")"
+    ],
+    "additionalDirectories": [
+      "d:\\ollama\\lib\\HeurisAgent\\src\\app\\api",
+      "D:\\ollama\\lib\\HeurisAgent\\public"
+    ]
+  }
+}

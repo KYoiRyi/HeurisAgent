@@ -1,0 +1,47 @@
+{
+  "name": "@heuris/api",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "lint": "eslint \"src/**/*.ts\"",
+    "ts-check": "tsc -p tsconfig.json --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/persistence/migrate.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.94.0",
+    "@electric-sql/pglite": "^0.2.17",
+    "@google/genai": "^1.52.0",
+    "@mistralai/mistralai": "^2.2.1",
+    "@nestjs/common": "^10.4.15",
+    "@nestjs/config": "^3.3.0",
+    "@nestjs/core": "^10.4.15",
+    "@nestjs/platform-express": "^10.4.15",
+    "@nestjs/serve-static": "^4.0.2",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "drizzle-orm": "^0.36.4",
+    "node-cron": "^4.2.1",
+    "openai": "^6.36.0",
+    "partial-json": "^0.1.7",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "typebox": "^1.1.24",
+    "uuid": "^11.0.3",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10.4.9",
+    "@nestjs/schematics": "^10.2.3",
+    "@types/express": "^5.0.0",
+    "@types/node": "^20.17.10",
+    "@types/node-cron": "^3.0.11",
+    "@types/uuid": "^10.0.0",
+    "drizzle-kit": "^0.28.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
