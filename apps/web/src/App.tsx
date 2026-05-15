@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import AppLayout from "./components/app-layout";
+import HomeRoute from "./routes/home";
 import DashboardRoute from "./routes/dashboard";
 import ClassroomRoute from "./routes/classroom";
 import ErrorsRoute from "./routes/errors";
@@ -12,7 +13,8 @@ export default function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route index element={<DashboardRoute />} />
+        <Route index element={<HomeRoute />} />
+        <Route path="dashboard" element={<DashboardRoute />} />
         <Route path="classroom" element={<ClassroomRoute />} />
         <Route path="errors" element={<ErrorsRoute />} />
         <Route path="review" element={<ReviewRoute />} />

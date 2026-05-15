@@ -26,7 +26,8 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { to: "/", label: "总控台", icon: LayoutDashboard, group: "core" },
+  { to: "/", label: "首页", icon: LayoutDashboard, group: "core" },
+  { to: "/dashboard", label: "学习总览", icon: Activity, group: "core" },
   { to: "/classroom", label: "课堂互动", icon: AGENT_THEMES.classroom.icon, agent: "classroom", group: "core" },
   { to: "/errors", label: "错题管理", icon: AGENT_THEMES.errors.icon, agent: "errors", group: "core" },
   { to: "/review", label: "复习策略", icon: AGENT_THEMES.review.icon, agent: "review", group: "core" },
