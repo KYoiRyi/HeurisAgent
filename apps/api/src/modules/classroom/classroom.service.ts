@@ -13,6 +13,7 @@ import { SettingsService } from "@/modules/settings/settings.service";
 import { ClassroomHistoryService } from "@/modules/classroom-history/classroom-history.service";
 import { AgentEventBus } from "@/runtime/event-bus";
 import { buildClassroomTools } from "@/runtime/classroom-tools";
+import { LearningRecordsService } from "@/modules/learning-records/learning-records.service";
 
 export interface ClassroomTurnInput {
   prompt: string;
@@ -25,12 +26,13 @@ export interface ClassroomTurnInput {
 
 export interface ClassroomTurnResult {
   result: string;
-  liveComponents: Array<{ html: string; css?: string; js?: string; description: string }>;
+  liveComponents: Array<{ html: string; css?: string; js?: string; description: string; stageType?: string }>;
   toolCalls: Array<{ name: string; args: unknown; isError?: boolean }>;
   resources: Array<{ id: string; title: string; category: string }>;
   errors: Array<{ id: string; questionText: string; errorType: string | null }>;
   memorySaved: number;
   knowledgePoints: string[];
+  scoreFeedback: { score: number; total: number; feedback: string; correct?: boolean } | null;
 }
 
 @Injectable()
@@ -45,6 +47,7 @@ export class ClassroomService {
     private readonly errors: ErrorsService,
     private readonly settings: SettingsService,
     private readonly history: ClassroomHistoryService,
+    private readonly learningRecords: LearningRecordsService,
   ) {}
 
   async runTurn(input: ClassroomTurnInput): Promise<ClassroomTurnResult> {
@@ -97,6 +100,9 @@ export class ClassroomService {
           "  • 在 JS 里调用 window.HeurisStage.emit(type, payload) 报告学生交互（answer / progress / measurement / misconception）。",
           "  • 不要使用外部 CDN 资源，所有逻辑用 vanilla JS。",
           "  • description 字段写成简短的中文标题。",
+          "  • stageType 字段（可选但推荐）：quiz（选择/填空题）、simulation（物理/化学模拟）、graph（图表/函数图像）、lab（虚拟实验）、exercise（综合练习）。",
+          "  • quiz 类型：答题后调用 HeurisStage.answer({ answer, correct, score, total })。",
+          "  • simulation/lab 类型：关键步骤调用 HeurisStage.progress({ step, total })。",
           "其他工具：",
           "  • save_learning_resource：遇到新的知识点 / 定律 / 公式 / 例题，主动保存。",
           "  • save_error_question：遇到学生答错或概念误解，主动记录。",
@@ -145,6 +151,7 @@ export class ClassroomService {
       const savedErrors: ClassroomTurnResult["errors"] = [];
       const knowledgePoints = new Set<string>();
       let memorySaved = 0;
+      let scoreFeedback: ClassroomTurnResult["scoreFeedback"] = null;
 
       agent.subscribe((event: PiAgentEvent) => {
         if (event.type === "tool_execution_start") {
@@ -154,13 +161,14 @@ export class ClassroomService {
             ts: new Date().toISOString(),
           });
           if (event.toolName === "render_live_component") {
-            const args = event.args as { html?: string; css?: string; js?: string; description?: string };
+            const args = event.args as { html?: string; css?: string; js?: string; description?: string; stageType?: string };
             if (args?.html) {
               liveComponents.push({
                 html: args.html,
                 css: args.css,
                 js: args.js,
                 description: args.description ?? "",
+                stageType: args.stageType,
               });
             }
           }
@@ -223,6 +231,23 @@ export class ClassroomService {
 
       const lastComponent = liveComponents[liveComponents.length - 1] ?? null;
 
+      // Extract score feedback from stage events
+      if (input.stageEvents) {
+        const answerEvents = input.stageEvents.filter((e) => e.type === "answer");
+        const lastAnswer = answerEvents[answerEvents.length - 1];
+        if (lastAnswer?.payload && typeof lastAnswer.payload === "object") {
+          const p = lastAnswer.payload as Record<string, unknown>;
+          if (typeof p.score === "number" && typeof p.total === "number") {
+            scoreFeedback = {
+              score: p.score,
+              total: p.total,
+              feedback: typeof p.feedback === "string" ? p.feedback : "",
+              correct: typeof p.correct === "boolean" ? p.correct : undefined,
+            };
+          }
+        }
+      }
+
       await this.history.add({
         sessionId,
         subject,
@@ -237,6 +262,14 @@ export class ClassroomService {
               description: lastComponent.description,
             }
           : null,
+        liveComponents: liveComponents.map((c) => ({
+          html: c.html,
+          css: c.css ?? "",
+          js: c.js ?? "",
+          description: c.description,
+          stageType: c.stageType,
+        })),
+        stageType: lastComponent?.stageType ?? null,
         toolCalls: toolCalls.map((t) => ({ name: t.name, isError: t.isError ?? false })),
       });
 
@@ -245,6 +278,16 @@ export class ClassroomService {
         subject,
         source: "classroom",
       });
+
+      if (scoreFeedback && studentName) {
+        await this.learningRecords.recordScore({
+          studentName,
+          subject,
+          score: scoreFeedback.score,
+          stageType: lastComponent?.stageType,
+          sessionId,
+        }).catch(() => {});
+      }
 
       this.events.emit({
         type: "task_done",
@@ -260,6 +303,7 @@ export class ClassroomService {
         errors: savedErrors,
         memorySaved,
         knowledgePoints: Array.from(knowledgePoints),
+        scoreFeedback,
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

@@ -179,6 +179,8 @@ export const classroomHistory = pgTable(
     messageType: varchar("message_type", { length: 30 }).notNull().default("message"),
     relatedKnowledgePoints: jsonb("related_knowledge_points").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     liveComponent: jsonb("live_component"),
+    liveComponents: jsonb("live_components").$type<unknown[]>().notNull().default(sql`'[]'::jsonb`),
+    stageType: varchar("stage_type", { length: 30 }),
     toolCalls: jsonb("tool_calls").$type<unknown[]>().notNull().default(sql`'[]'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

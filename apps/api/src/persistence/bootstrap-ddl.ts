@@ -123,6 +123,8 @@ CREATE TABLE IF NOT EXISTS classroom_history (
   message_type              VARCHAR(30)  NOT NULL DEFAULT 'message',
   related_knowledge_points  JSONB        NOT NULL DEFAULT '[]'::jsonb,
   live_component            JSONB,
+  live_components           JSONB        NOT NULL DEFAULT '[]'::jsonb,
+  stage_type                VARCHAR(30),
   tool_calls                JSONB        NOT NULL DEFAULT '[]'::jsonb,
   created_at                TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
@@ -224,6 +226,9 @@ CREATE TABLE IF NOT EXISTS app_settings (
   value      JSONB       NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE classroom_history ADD COLUMN IF NOT EXISTS live_components JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE classroom_history ADD COLUMN IF NOT EXISTS stage_type VARCHAR(30);
 `;
 
 export async function bootstrap(db: Database): Promise<void> {

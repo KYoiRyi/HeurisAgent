@@ -20,6 +20,13 @@ const RenderLiveComponentSchema = Type.Object({
   css: Type.Optional(Type.String({ description: "Vanilla CSS styles" })),
   js: Type.Optional(Type.String({ description: "Vanilla JavaScript with window.HeurisStage.emit(type, payload) callbacks" })),
   description: Type.String({ description: "A brief description of the component" }),
+  stageType: Type.Optional(Type.Union([
+    Type.Literal("quiz"),
+    Type.Literal("simulation"),
+    Type.Literal("graph"),
+    Type.Literal("lab"),
+    Type.Literal("exercise"),
+  ], { description: "Type of stage: quiz (选择/填空), simulation (物理/化学模拟), graph (图表/函数), lab (虚拟实验), exercise (综合练习)" })),
 });
 
 const SaveResourceSchema = Type.Object({

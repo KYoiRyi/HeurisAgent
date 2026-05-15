@@ -19,6 +19,18 @@ export class ClassroomHistoryController {
     return { items, total: items.length };
   }
 
+  @Get("stages")
+  async listStages(
+    @Query("subject") subject?: string,
+    @Query("sessionId") sessionId?: string,
+  ) {
+    const items = await this.history.listStages({
+      subject: subject ?? null,
+      sessionId: sessionId ?? null,
+    });
+    return { items, total: items.length };
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async add(

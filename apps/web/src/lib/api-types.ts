@@ -67,6 +67,8 @@ export interface ClassroomMessage {
   message_type: string;
   related_knowledge_points: string[];
   live_component: Record<string, string> | null;
+  live_components?: unknown[];
+  stage_type?: string | null;
   tool_calls: Record<string, unknown>[];
   created_at: string;
 }

@@ -13,6 +13,8 @@ export interface ClassroomHistoryMessage {
   message_type: string;
   related_knowledge_points: string[];
   live_component: Record<string, string> | null;
+  live_components: unknown[];
+  stage_type: string | null;
   tool_calls: Record<string, unknown>[];
   created_at: string;
 }
@@ -25,6 +27,8 @@ export interface AddClassroomHistoryInput {
   messageType?: string;
   knowledgePoints?: string[];
   liveComponent?: Record<string, string> | null;
+  liveComponents?: unknown[];
+  stageType?: string | null;
   toolCalls?: Record<string, unknown>[];
 }
 
@@ -43,6 +47,8 @@ export class ClassroomHistoryService {
         messageType: input.messageType ?? "message",
         relatedKnowledgePoints: input.knowledgePoints ?? [],
         liveComponent: input.liveComponent ?? null,
+        liveComponents: input.liveComponents ?? [],
+        stageType: input.stageType ?? null,
         toolCalls: input.toolCalls ?? [],
       })
       .returning();
@@ -64,6 +70,26 @@ export class ClassroomHistoryService {
       .limit(opts.limit ?? 80);
 
     return rows.map(toMessage).reverse();
+  }
+
+  async listStages(
+    opts: { sessionId?: string | null; subject?: string | null } = {},
+  ): Promise<ClassroomHistoryMessage[]> {
+    const conditions = [] as ReturnType<typeof eq>[];
+    if (opts.subject) conditions.push(eq(classroomHistory.subject, opts.subject));
+    if (opts.sessionId) conditions.push(eq(classroomHistory.sessionId, opts.sessionId));
+
+    const rows = await this.db
+      .select()
+      .from(classroomHistory)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(classroomHistory.createdAt), desc(classroomHistory.id))
+      .limit(100);
+
+    return rows
+      .filter((r) => r.liveComponent !== null)
+      .map(toMessage)
+      .reverse();
   }
 
   async buildContext(subject: string, limit = 16): Promise<string> {
@@ -92,6 +118,8 @@ function toMessage(row: ClassroomHistoryRow): ClassroomHistoryMessage {
     message_type: row.messageType,
     related_knowledge_points: row.relatedKnowledgePoints ?? [],
     live_component: (row.liveComponent as Record<string, string> | null) ?? null,
+    live_components: (row.liveComponents ?? []) as unknown[],
+    stage_type: row.stageType ?? null,
     tool_calls: ((row.toolCalls ?? []) as unknown[]).filter(
       (item): item is Record<string, unknown> => typeof item === "object" && item !== null,
     ),
