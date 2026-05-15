@@ -101,12 +101,23 @@ export class ClassroomSessionsService {
       });
       return session.id;
     }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId);
+    if (!isUuid) {
+      const session = await this.create({
+        title: `${subject} 课堂 ${new Date().toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`,
+        subject,
+      });
+      return session.id;
+    }
+
     const existing = await this.db
       .select({ id: classroomSessions.id })
       .from(classroomSessions)
       .where(eq(classroomSessions.id, sessionId))
       .limit(1);
     if (existing.length > 0) return sessionId;
+
     const [row] = await this.db
       .insert(classroomSessions)
       .values({

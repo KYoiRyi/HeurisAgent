@@ -55,9 +55,14 @@ export class ClassroomService {
   async runTurn(input: ClassroomTurnInput): Promise<ClassroomTurnResult> {
     const subject = input.subject?.trim() || "通用";
     const studentName = input.studentName?.trim();
-    const sessionId = input.sessionId?.trim()
-      ? await this.sessions.ensureSession(input.sessionId.trim(), subject)
-      : undefined;
+    let sessionId: string | undefined;
+    try {
+      sessionId = input.sessionId?.trim()
+        ? await this.sessions.ensureSession(input.sessionId.trim(), subject)
+        : undefined;
+    } catch {
+      sessionId = input.sessionId?.trim();
+    }
 
     const [run] = await this.db
       .insert(taskRuns)
