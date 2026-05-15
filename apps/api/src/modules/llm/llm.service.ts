@@ -120,20 +120,6 @@ export class LlmService {
     const settings = await this.settings.get();
     const { resolvedBaseUrl, model, resolvedApi } = settings;
 
-    if (
-      resolvedApi === "anthropic-messages" ||
-      resolvedApi === "google-generative-ai" ||
-      resolvedApi === "mistral-conversations"
-    ) {
-      return {
-        ok: true,
-        models: [model],
-        baseUrl: resolvedBaseUrl,
-        model,
-        provider: resolvedApi,
-      };
-    }
-
     try {
       const apiKey = this.settings.getActiveApiKey();
       const res = await fetch(`${resolvedBaseUrl}/models`, {

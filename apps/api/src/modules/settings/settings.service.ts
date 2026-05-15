@@ -141,10 +141,7 @@ export class SettingsService implements OnModuleInit {
 
 function resolveApi(provider?: string): Api {
   const normalized = (provider ?? "").toLowerCase();
-  if (normalized === "anthropic") return "anthropic-messages";
-  if (normalized === "google" || normalized === "gemini") return "google-generative-ai";
-  if (normalized === "mistral") return "mistral-conversations";
-  if (normalized === "openai-responses") return "openai-responses";
+  if (normalized === "ollama" || normalized === "minimax" || normalized === "openai") return "openai-completions";
   return "openai-completions";
 }
 
@@ -152,12 +149,7 @@ function resolveBaseUrl(api: Api, provider?: string, customBaseUrl?: string): st
   if (customBaseUrl) return customBaseUrl.replace(/\/$/, "");
 
   const p = (provider ?? "").toLowerCase();
-  if (api === "anthropic-messages") return "https://api.anthropic.com";
-  if (api === "google-generative-ai") return "https://generativelanguage.googleapis.com/v1beta";
-  if (api === "mistral-conversations") return "https://api.mistral.ai";
-  if (p === "deepseek") return "https://api.deepseek.com/v1";
-  if (p === "groq") return "https://api.groq.com/openai/v1";
-  if (p === "openrouter") return "https://openrouter.ai/api/v1";
+  if (p === "ollama") return "http://127.0.0.1:11434/v1";
   if (p === "openai") return "https://api.openai.com/v1";
   if (p === "minimax") return DEFAULT_BASE_URL;
   return DEFAULT_BASE_URL;

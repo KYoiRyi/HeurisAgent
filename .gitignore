@@ -2,10 +2,8 @@ node_modules/
 **/node_modules/
 **/dist/
 **/.next/
-data/pgdata/
-data/sessions/
-data/agent.db*
-data/settings.json
+data/*
+!data/.gitkeep
 .tsbuildinfo
 *.tsbuildinfo
 .env
