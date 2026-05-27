@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>启发式学习智能体答辩PPT</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #cc785c;
+            --ink: #141413;
+            --body: #3d3d3a;
+            --muted: #6c6a64;
+            --hairline: #e6dfd8;
+            --canvas: #faf9f5;
+            --surface-card: #efe9de;
+            --surface-cream-strong: #e8e0d2;
+        }
+
+        body, html { 
+            margin: 0; 
+            padding: 0;
+            background: var(--canvas); 
+            font-family: 'Inter', sans-serif; 
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden; 
+        }
+
+        .ppt-container { 
+            width: 100vw; 
+            height: 100vh; 
+            background: var(--canvas); 
+            position: relative; 
+        }
+
+        .slide { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            display: none; 
+            padding: 5vw 8vw; 
+            box-sizing: border-box; 
+            flex-direction: column;
+            animation: fadeIn 0.3s ease-in-out;
+            overflow: hidden; /* Prevent overflow outside slide */
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .slide.active { display: flex; }
+
+        h1, h2, h3 { 
+            font-family: 'Cormorant Garamond', serif; 
+            font-weight: 600; 
+            margin: 0; 
+            letter-spacing: -0.02em; 
+            color: var(--ink);
+        }
+        
+        .main-title {
+            font-size: 5vw;
+            color: var(--primary);
+            margin-bottom: 1vh;
+            line-height: 1.2;
+        }
+        .author-subtitle {
+            font-size: 1.5vw;
+            color: var(--muted);
+            font-weight: 500;
+            letter-spacing: 2px;
+        }
+
+        .slide-title {
+            font-size: 3.2vw;
+            color: var(--primary);
+            margin-bottom: 3vh;
+            border-bottom: 2px solid var(--hairline);
+            padding-bottom: 1vh;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        .content { 
+            font-size: 1.4vw; 
+            line-height: 1.6; 
+            color: var(--body); 
+            flex: 1; 
+            overflow-y: auto;
+            padding-right: 1vw; /* For scrollbar if needed */
+        }
+        
+        /* Custom scrollbar for content if it ever overflows */
+        .content::-webkit-scrollbar { width: 6px; }
+        .content::-webkit-scrollbar-track { background: transparent; }
+        .content::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 3px; }
+        
+        .content p { margin-bottom: 2vh; }
+        .content li { margin-bottom: 1.5vh; }
+
+        .layout-split { display: flex; width: 100%; height: 100%; gap: 5vw; align-items: stretch; flex: 1; min-height: 0; }
+        .col { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+        .col-center { justify-content: center; }
+
+        .image-placeholder { 
+            background: var(--surface-card); 
+            border: 2px dashed var(--muted); 
+            border-radius: 16px; 
+            display: flex; 
+            flex-direction: column;
+            align-items: center; 
+            justify-content: center; 
+            padding: 3vw; 
+            text-align: left; 
+            color: var(--muted); 
+            height: 100%; 
+            box-sizing: border-box; 
+            font-size: 1.1vw; 
+            line-height: 1.6;
+        }
+        .placeholder-tag {
+            font-weight: 600;
+            margin-bottom: 2vh;
+            color: var(--primary);
+            font-size: 1.3vw;
+        }
+
+        .accent-dot {
+            width: 12px;
+            height: 12px;
+            background: var(--primary);
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 12px;
+            transform: translateY(-4px);
+        }
+
+        .controls { 
+            position: fixed; 
+            bottom: 3vh; 
+            right: 4vw; 
+            display: flex; 
+            gap: 20px; 
+            z-index: 100; 
+            background: var(--surface-cream-strong);
+            padding: 12px 24px;
+            border-radius: 999px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            border: 1px solid var(--hairline);
+        }
+        .btn { 
+            background: transparent; 
+            border: none; 
+            cursor: pointer; 
+            color: var(--ink); 
+            font-weight: 600;
+            font-size: 16px;
+            font-family: 'Inter', sans-serif;
+            transition: color 0.2s;
+        }
+        .btn:hover { color: var(--primary); }
+        .page-num { display: flex; align-items: center; font-variant-numeric: tabular-nums; font-size: 16px; color: var(--muted); font-weight: 500; }
+
+        @media print {
+            @page { size: 16in 9in; margin: 0; }
+            body, html { height: auto !important; overflow: visible !important; background: var(--canvas) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .ppt-container { width: 100% !important; height: auto !important; position: static !important; }
+            .slide {
+                position: relative !important;
+                display: flex !important;
+                width: 16in !important;
+                height: 9in !important;
+                page-break-after: always !important;
+                page-break-inside: avoid !important;
+                opacity: 1 !important;
+                animation: none !important;
+                padding: 1in 1.2in !important;
+            }
+            .controls { display: none !important; }
+            
+            .main-title { font-size: 80px; margin-bottom: 24px; }
+            .author-subtitle { font-size: 28px; }
+            .slide-title { font-size: 48px; margin-bottom: 40px; }
+            .content { font-size: 24px; line-height: 1.6; }
+            .content p { margin-bottom: 24px; }
+            .content li { margin-bottom: 16px; }
+            .image-placeholder { font-size: 18px; padding: 40px; }
+            .placeholder-tag { font-size: 22px; margin-bottom: 20px; }
+            .layout-split { gap: 80px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="ppt-container">
+        
+        <!-- Slide 1: Title Slide -->
+        <div class="slide active" id="slide-1" style="justify-content: center; align-items: center; text-align: center;">
+            <h1 class="main-title" style="font-size: 6vw;">启发式学习智能体</h1>
+            <div class="author-subtitle" style="font-size: 2vw; margin-top: 3vh;">上海市晋元高级中学 &nbsp;&nbsp;|&nbsp;&nbsp; 韩林睿</div>
+        </div>
+
+        <!-- Slide 2: Intro -->
+        <div class="slide" id="slide-2">
+            <h2 class="slide-title"><span class="accent-dot"></span>问题在哪里？</h2>
+            <div class="layout-split">
+                <div class="col col-center">
+                    <div class="content">
+                        <p>当下，学生自主获取知识的方式已经十分丰富，搜索引擎、短视频、问答社区，随手可得。</p>
+                        <p>但知识的获取便捷了，学习效果的问题却没有随之解决——答错的题下次还是不会，订下的复习计划与自己的薄弱点往往并不吻合。</p>
+                        <p style="color: var(--primary); font-weight: 500;">知识不缺，缺的是一个能记住学生、能给出反馈、能真正因人而异的学习过程。这正是本项目想解决的问题。</p>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="image-placeholder">
+                        <div class="placeholder-tag">[此处预留配图 1]</div>
+                        <div>画面中央竖排三行短句，字体较大：<br><br>第一行写"搜到了答案"并附一个打勾的图标<br>第二行写"但下次还是不会"并附一个打叉的图标<br>第三行写"问题在哪里？"字体略小且带问号<br><br>右下角有一个向右的细箭头暗示将要揭晓答案。整体克制，不放装饰元素。</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 3: Project Intro -->
+        <div class="slide" id="slide-3">
+            <h2 class="slide-title"><span class="accent-dot"></span>项目介绍</h2>
+            <div class="layout-split">
+                <div class="col">
+                    <div class="content">
+                        <p>我们开发了<strong>“启发式学习智能体”</strong>，这是一个面向中学生的教育辅助平台，整合了课堂问答、错题记录与复习计划三项功能，由三个各有分工、数据互通的智能体协同驱动。</p>
+                        <p>三个智能体的底层均采用开源框架 <strong>OpenClaw</strong> 的核心引擎。该引擎支持工具并行调用与完整的生命周期事件机制，使得三个智能体共用一套调度基础，而无需各自重复实现。</p>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="image-placeholder">
+                        <div class="placeholder-tag">[此处预留配图 2]</div>
+                        <div>画面正中是项目名称"启发式学习智能体"，字体大而清晰，下方是一行副标题"课堂问答 · 错题记录 · 复习计划"。<br><br>中央有一个由三个节点组成的三角形网络图形，三个节点分别标注课堂、错题、复习，节点之间有连线，象征数据互通。整体风格简洁，科技感强。</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 4: Agents Overview -->
+        <div class="slide" id="slide-4">
+            <h2 class="slide-title"><span class="accent-dot"></span>三个智能体的分工</h2>
+            <div class="layout-split" style="flex-direction: column; gap: 3vh;">
+                <div class="content" style="flex: 0; min-height: max-content;">
+                    <p>本项目的核心是三个协作智能体，它们共用同一套学生记忆数据，数据在它们之间自动流转，形成完整的学习闭环：</p>
+                    <ul style="color: var(--ink);">
+                        <li><strong>课堂互动智能体：</strong> 负责与学生进行一对一的启发式问答，通过追问引导自主推理，并即时生成可操作的练习题。</li>
+                        <li><strong>错题管理智能体：</strong> 负责在学生作答出错时，自动记录题目、错误答案与类型，构建错题档案。</li>
+                        <li><strong>复习策略智能体：</strong> 负责读取错题档案与历史记录，生成按天排列的个性化复习计划。</li>
+                    </ul>
+                </div>
+                <div class="col" style="flex: 1;">
+                    <div class="image-placeholder" style="padding: 2vw;">
+                        <div class="placeholder-tag">[此处预留配图 3]</div>
+                        <div>画面呈水平三栏布局：<br><br>左栏图标是一个对话气泡加问号，代表课堂互动智能体，标注文字"启发式问答 · 互动练习"。<br>中栏图标是一个带有红色叉号的文档，代表错题管理智能体，标注文字"自动记录 · 错因分类"。<br>右栏图标是一个日历与进度条，代表复习策略智能体，标注文字"个性计划 · 进度追踪"。<br><br>三栏之间用向右的箭头连接，箭头上方标注"数据流转"。整体干净明了。</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: Classroom Agent -->
+        <div class="slide" id="slide-5">
+            <h2 class="slide-title"><span class="accent-dot"></span>课堂智能体的问答机制</h2>
+            <div class="layout-split">
+                <div class="col">
+                    <div class="content">
+                        <p style="color: var(--primary); font-weight: 500;">核心问题：如何知道什么时候该追问、什么时候该直接指导？</p>
+                        <p><strong>工作流程：</strong></p>
+                        <ol style="color: var(--ink);">
+                            <li>学生发来消息后，智能体检索历史记忆，了解其已掌握的概念与曾经出错的位置。</li>
+                            <li><strong>针对新知识：</strong>采用类比与反问的方式引导学生自行推理。</li>
+                            <li><strong>针对旧错点：</strong>更直接地帮助学生重新建立正确认知。</li>
+                            <li>一轮结束后，本轮涉及的知识点与理解状态会被提炼为结构化记忆片段入库。</li>
+                        </ol>
+                        <p>这使得每次问答都不是孤立交互，而是持续积累的学习过程。</p>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="image-placeholder">
+                        <div class="placeholder-tag">[此处预留配图 4]</div>
+                        <div>画面展示一组模拟对话界面。<br><br>左侧是学生消息："浮力是什么意思"。<br>右侧是智能体回复："你觉得一块铁放进水里，水对它有没有作用力？方向朝哪？"。<br><br>下方出现嵌入式练习区，内有一道填空题："物体浸入液体时，液体对物体施加的____方向的力叫做浮力"，带"提交"按钮。</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: Mistake Agent -->
+        <div class="slide" id="slide-6">
+            <h2 class="slide-title"><span class="accent-dot"></span>错题管理智能体的工作机制</h2>
+            <div class="layout-split">
+                <div class="col">
+                    <div class="content">
+                        <p>当学生在互动练习中填写了错误答案并提交后，课堂智能体会触发错题管理模块。</p>
+                        <p>该模块自动提取本题题目原文、实际作答与正确答案，并对错误类型进行精准分类（如：概念理解偏差、计算失误、方法选择错误、粗心）。</p>
+                        <p>随后，完整的错题记录将被写入数据库，同时以<strong style="color: var(--primary);">高优先级标签</strong>同步写入这名学生的长期记忆。错题永久关联该学生，后续问答主动调取。这一机制让错误不再是一次性发生的，而是驱动后续学习的有效数据。</p>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="image-placeholder">
+                        <div class="placeholder-tag">[此处预留配图 5]</div>
+                        <div>画面是一个错题本界面，顶部有学科筛选标签栏，当前选中"物理"。<br><br>下方是若干错题卡片，每张卡片显示题目简要内容、错误类型标签（不同颜色，如红色"概念偏差"，橙色"计算失误"）、记录日期，以及右侧一个"已掌握"勾选按钮。整体界面简洁，字体清晰，卡片间有适当间距。</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Review Agent -->
+        <div class="slide" id="slide-7">
+            <h2 class="slide-title"><span class="accent-dot"></span>复习策略智能体与记忆系统</h2>
+            <div class="layout-split">
+                <div class="col">
+                    <div class="content">
+                        <p>复习策略智能体负责整合错题数据与历史记忆，为学生生成<strong>个性化复习计划</strong>。它读取该学生近期错题的类型分布，检索相关记忆，生成一份包含盲点清单、优先主题、每日任务的计划文档。</p>
+                        <p>支撑这一切的底层是<strong>长期记忆系统</strong>：</p>
+                        <ul style="color: var(--ink);">
+                            <li>每次对话后自动提取关键信息，按重要程度分级存储。</li>
+                            <li>新对话开始时，系统提前检索相关记忆。</li>
+                            <li>将其作为背景信息注入给智能体。</li>
+                        </ul>
+                        <p style="color: var(--primary); font-weight: 500;">智能体在每次回答之前，就已经知道面对的是谁、薄弱点在哪里。</p>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="image-placeholder">
+                        <div class="placeholder-tag">[此处预留配图 6]</div>
+                        <div>画面分为左右两部分：<br><br>左侧是一个复习计划卡片，顶部标注学科和总天数，下方是按天排列的任务列表及时长（如"Day1: 浮力基本概念, 30min"），底部有进度条。<br><br>右侧是一个记忆时间线，纵向排列节点并标注信息："第一次对话：记录姓名年级"、"第三次对话：标记浮力概念错误"、"第五次对话：生成复习计划"，节点间竖线连接，形成成长轨迹。</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 8: Summary -->
+        <div class="slide" id="slide-8">
+            <h2 class="slide-title"><span class="accent-dot"></span>总结与展望</h2>
+            <div class="layout-split">
+                <div class="col">
+                    <div class="content">
+                        <p style="margin-bottom: 4vh;">本项目的核心价值可以归纳为以下三点：</p>
+                        <ol style="color: var(--ink); gap: 3vh; display: flex; flex-direction: column;">
+                            <li><strong>将单次问答转变为持续陪伴。</strong><br>智能体在每次回答前掌握历史背景，每次对话后更新画像，积累不中断。</li>
+                            <li><strong>将分散的错误转化为可分析数据。</strong><br>错题不仅仅是被记录，而是成为驱动复习计划生成的直接依据。</li>
+                            <li><strong>将个性化从口号变为可执行的机制。</strong><br>每名学生的复习计划、问答策略和知识点优先级都基于其本人真实数据生成，而非通用模板。</li>
+                        </ol>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="image-placeholder">
+                        <div class="placeholder-tag">[此处预留配图 7]</div>
+                        <div>画面左侧竖排三个图标加文字：<br><br>1. 循环箭头，对应文字"持续陪伴，积累不断"<br>2. 数据库加图表，对应文字"错题入库，驱动复习"<br>3. 人物加个性化标签，对应文字"基于真实数据，非通用模板"<br><br>右侧留白，可以放置项目名称或二维码。</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Slide 9: Thank You Page -->
+        <div class="slide" id="slide-9" style="justify-content: center; align-items: center; text-align: center;">
+            <h1 class="main-title" style="font-size: 5vw; color: var(--primary);">感谢评委老师的聆听</h1>
+            <div class="author-subtitle" style="font-size: 2.5vw; margin-top: 3vh; color: var(--ink);">请多批评指正！</div>
+        </div>
+
+        <!-- Controls (Hidden on Print) -->
+        <div class="controls" id="controls">
+            <button class="btn" onclick="prevSlide()">❮</button>
+            <div class="page-num"><span id="current-page">1</span> / 9</div>
+            <button class="btn" onclick="nextSlide()">❯</button>
+        </div>
+
+    </div>
+
+    <script>
+        let currentSlide = 1;
+        const totalSlides = 9;
+
+        function updateSlides() {
+            document.querySelectorAll('.slide').forEach((slide, index) => {
+                slide.classList.remove('active');
+                if (index + 1 === currentSlide) {
+                    slide.classList.add('active');
+                }
+            });
+            document.getElementById('current-page').innerText = currentSlide;
+        }
+
+        function nextSlide() {
+            if (currentSlide < totalSlides) {
+                currentSlide++;
+                updateSlides();
+            }
+        }
+
+        function prevSlide() {
+            if (currentSlide > 1) {
+                currentSlide--;
+                updateSlides();
+            }
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === 'Space' || e.key === 'Enter') {
+                nextSlide();
+            } else if (e.key === 'ArrowLeft' || e.key === 'Backspace') {
+                prevSlide();
+            }
+        });
+    </script>
+</body>
+</html>
